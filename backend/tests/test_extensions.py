@@ -183,3 +183,36 @@ def test_email_subscription_double_opt_in(client, h, make_issue):
     n = len(_mails_to("neighbour@example.com"))
     client.post(f"/api/admin/issues/{iid}/official-update", headers=h["admin"], json={"body": "Crew booked for Friday."})
     assert len(_mails_to("neighbour@example.com")) == n
+
+
+# ---------------------------------------------------------------- database config & production safety
+def test_normalize_db_url():
+    from app.core.config import normalize_db_url
+    assert normalize_db_url("postgresql://u:p@host:5432/db") == "postgresql+psycopg://u:p@host:5432/db"
+    assert normalize_db_url("postgres://u:p@host:5432/db") == "postgresql+psycopg://u:p@host:5432/db"
+    assert normalize_db_url("postgresql+psycopg://u:p@host:5432/db") == "postgresql+psycopg://u:p@host:5432/db"
+    assert normalize_db_url("") == ""
+
+
+def test_production_jwt_secret_validation():
+    import pytest
+    from app.core.config import DEFAULT_JWT_SECRET, Settings
+
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        Settings(environment="production", jwt_secret=DEFAULT_JWT_SECRET)
+
+    with pytest.raises(RuntimeError, match="JWT_SECRET"):
+        Settings(environment="production", jwt_secret="")
+
+    s = Settings(environment="production", jwt_secret="custom-secure-secret")
+    assert s.jwt_secret == "custom-secure-secret"
+
+
+def test_pooler_flag():
+    from app.core.config import Settings
+    s_default = Settings()
+    assert s_default.db_use_pooler is False
+
+    s_pooler = Settings(db_use_pooler=True)
+    assert s_pooler.db_use_pooler is True
+

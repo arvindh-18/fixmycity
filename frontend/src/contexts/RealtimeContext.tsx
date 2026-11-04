@@ -35,8 +35,24 @@ export function RealtimeProvider({ children }: { children: ReactNode }) {
     const connect = () => {
       const token = tokenStore.get();
       if (!token) return;
-      const proto = location.protocol === "https:" ? "wss" : "ws";
-      ws = new WebSocket(`${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`);
+      const apiBase = (import.meta.env.VITE_API_BASE_URL ?? "").trim();
+      let wsUrl: string;
+      if (apiBase) {
+        try {
+          const u = new URL(apiBase, window.location.href);
+          const proto = u.protocol === "https:" ? "wss:" : "ws:";
+          wsUrl = `${proto}//${u.host}${u.pathname.replace(/\/+$/, "")}/ws?token=${encodeURIComponent(token)}`;
+        } catch {
+          const wsBase = apiBase
+            .replace(/^https?:\/\//i, (m: string) => (m.toLowerCase().startsWith("https") ? "wss://" : "ws://"))
+            .replace(/\/+$/, "");
+          wsUrl = `${wsBase}/ws?token=${encodeURIComponent(token)}`;
+        }
+      } else {
+        const proto = location.protocol === "https:" ? "wss" : "ws";
+        wsUrl = `${proto}://${location.host}/ws?token=${encodeURIComponent(token)}`;
+      }
+      ws = new WebSocket(wsUrl);
       ws.onopen = () => {
         retry = 0;
         setConnected(true);

@@ -9,8 +9,10 @@ from app.core.config import settings
 from app.database.session import Base
 import app.models  # noqa: F401  (registers all tables)
 
+target_db_url = settings.direct_database_url or settings.database_url
+
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
+config.set_main_option("sqlalchemy.url", target_db_url.replace("%", "%%"))
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 target_metadata = Base.metadata
@@ -24,7 +26,7 @@ def include_object(obj, name, type_, reflected, compare_to):
 
 
 def run_migrations_offline() -> None:
-    context.configure(url=settings.database_url, target_metadata=target_metadata, literal_binds=True,
+    context.configure(url=target_db_url, target_metadata=target_metadata, literal_binds=True,
                       include_object=include_object, render_item=alembic_helpers.render_item)
     with context.begin_transaction():
         context.run_migrations()

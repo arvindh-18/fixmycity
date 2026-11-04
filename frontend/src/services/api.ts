@@ -39,6 +39,13 @@ export function qs(params?: Query): string {
   return s ? `?${s}` : "";
 }
 
+export const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL ?? "").replace(/\/+$/, "");
+
+export function apiUrl(path: string): string {
+  if (!API_BASE_URL || /^https?:\/\//i.test(path)) return path;
+  return path.startsWith("/") ? `${API_BASE_URL}${path}` : `${API_BASE_URL}/${path}`;
+}
+
 async function request<T>(method: string, path: string, body?: unknown, query?: Query): Promise<T> {
   const headers: Record<string, string> = {};
   const token = tokenStore.get();
@@ -49,7 +56,7 @@ async function request<T>(method: string, path: string, body?: unknown, query?: 
 
   let res: Response;
   try {
-    res = await fetch(`${path}${qs(query)}`, { method, headers, body: payload });
+    res = await fetch(`${apiUrl(path)}${qs(query)}`, { method, headers, body: payload });
   } catch {
     throw new ApiError(0, "Can't reach the Commons server. Check your connection and try again.");
   }
@@ -72,5 +79,8 @@ export const api = {
 };
 
 export function mediaUrl(url: string | null | undefined): string | undefined {
-  return url ?? undefined;
+  if (!url) return undefined;
+  if (/^https?:\/\//i.test(url)) return url;
+  if (!API_BASE_URL) return url;
+  return url.startsWith("/") ? `${API_BASE_URL}${url}` : `${API_BASE_URL}/${url}`;
 }

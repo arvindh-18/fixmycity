@@ -30,18 +30,43 @@ def _list(name: str, default: str) -> list[str]:
     return [v.strip() for v in os.getenv(name, default).split(",") if v.strip()]
 
 
+DEFAULT_JWT_SECRET = "dev-only-change-me-in-production-please-32b"
+
+
+def normalize_db_url(url: str) -> str:
+    """Normalise PostgreSQL URLs to the psycopg 3 driver (postgresql+psycopg://)."""
+    if not url:
+        return url
+    if url.startswith("postgres://"):
+        return "postgresql+psycopg://" + url[len("postgres://"):]
+    if url.startswith("postgresql://"):
+        return "postgresql+psycopg://" + url[len("postgresql://"):]
+    return url
+
+
 @dataclass(frozen=True)
 class Settings:
     app_name: str = "Commons"
     environment: str = os.getenv("ENVIRONMENT", "development")
-    database_url: str = os.getenv(
-        "DATABASE_URL", "postgresql+psycopg://openward:openward@localhost:5432/openward"
+    database_url: str = normalize_db_url(
+        os.getenv("DATABASE_URL", "postgresql+psycopg://openward:openward@localhost:5432/openward")
     )
-    jwt_secret: str = os.getenv("JWT_SECRET", "dev-only-change-me-in-production-please-32b")
+    direct_database_url: str = normalize_db_url(os.getenv("DIRECT_DATABASE_URL", ""))
+    db_use_pooler: bool = os.getenv("DB_USE_POOLER", "false").lower() == "true"
+    jwt_secret: str = os.getenv("JWT_SECRET", DEFAULT_JWT_SECRET)
     jwt_expiry_hours: int = int(os.getenv("JWT_EXPIRY_HOURS", "12"))
     cors_origins: list[str] = field(
         default_factory=lambda: _list("CORS_ORIGINS", "http://localhost:5173,http://127.0.0.1:5173")
     )
+
+    def __post_init__(self) -> None:
+        if self.environment.lower() == "production" and (
+            not self.jwt_secret or self.jwt_secret == DEFAULT_JWT_SECRET
+        ):
+            raise RuntimeError(
+                "CRITICAL: JWT_SECRET must be set to a secure, random string in production. "
+                "Do not use the development default."
+            )
 
     # Storage
     storage_backend: str = os.getenv("STORAGE_BACKEND", "local")  # local | supabase

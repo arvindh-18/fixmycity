@@ -13,7 +13,8 @@ class Base(DeclarativeBase):
     pass
 
 
-engine = create_engine(settings.database_url, pool_pre_ping=True, future=True)
+connect_args = {"prepare_threshold": None} if settings.db_use_pooler else {}
+engine = create_engine(settings.database_url, pool_pre_ping=True, future=True, connect_args=connect_args)
 SessionLocal = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
 
 

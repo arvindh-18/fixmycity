@@ -193,6 +193,8 @@ Detailed documentation, written to be explained in a viva:
 
 | Document | Contents |
 |---|---|
+| [docs/deployment.md](docs/deployment.md) | step-by-step production setup: Vercel, Render, Supabase, env vars, post-deploy checklist |
+| [docs/scaling.md](docs/scaling.md) | current single-process boundaries and future upgrade roadmap |
 | [docs/design-system.md](docs/design-system.md) | how the Commons design system is wired in and the mapping decisions |
 | [docs/architecture.md](docs/architecture.md) | system shape, request flow, module map, decisions with alternatives and trade-offs |
 | [docs/database-schema.md](docs/database-schema.md) | every table, relationships, indexes, immutability |
@@ -215,7 +217,13 @@ Detailed documentation, written to be explained in a viva:
 
 ---
 
-## 7. Known limitations
+## 7. Deployment
+- **[docs/deployment.md](docs/deployment.md)**: Production deployment instructions for **Vercel** (frontend), **Render** (single-worker Docker web service), and **Supabase** (Postgres with PostGIS + photo storage bucket), including full environment variable reference and post-deployment checklist.
+- **[docs/scaling.md](docs/scaling.md)**: Honest appraisal of current concurrency limits (single-process WebSocket hub, in-memory rate limiter, in-process escalation loop) and the future roadmap (Redis pub/sub, distributed rate limiting, background worker, and CDN).
+
+---
+
+## 8. Known limitations
 - Until you run the importer (section 4), localities are approximate shapes and facilities are samples — both labelled.
 - Photo checks need a vision-capable AI model; in the default rule mode photos are stored but not analysed, and the app says so.
 - The WebSocket hub and rate limiter live in one process — run a single API worker (as the commands above do).

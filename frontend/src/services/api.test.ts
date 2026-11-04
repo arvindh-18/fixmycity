@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { api, ApiError, qs, tokenStore } from "./api";
+import { api, ApiError, apiUrl, mediaUrl, qs, tokenStore } from "./api";
 
 const json = (body: unknown, status = 200) => new Response(JSON.stringify(body), { status, headers: { "content-type": "application/json" } });
 
@@ -35,5 +35,17 @@ describe("api client", () => {
   it("reports network failures plainly", async () => {
     vi.spyOn(globalThis, "fetch").mockRejectedValue(new TypeError("Failed to fetch"));
     await expect(api.get("/api/meta")).rejects.toThrow(/Can't reach the Commons server/);
+  });
+
+  it("handles mediaUrl for relative and absolute URLs", () => {
+    expect(mediaUrl(null)).toBeUndefined();
+    expect(mediaUrl(undefined)).toBeUndefined();
+    expect(mediaUrl("https://example.supabase.co/storage/v1/object/public/bucket/img.jpg"))
+      .toBe("https://example.supabase.co/storage/v1/object/public/bucket/img.jpg");
+    expect(mediaUrl("/media/issues/abc.jpg")).toBe("/media/issues/abc.jpg");
+  });
+
+  it("prefixes relative paths with apiUrl when base is set or leaves unchanged when unset", () => {
+    expect(apiUrl("/api/health")).toBe("/api/health");
   });
 });
