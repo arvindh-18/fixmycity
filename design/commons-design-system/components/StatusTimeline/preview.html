@@ -1,0 +1,12 @@
+<!-- @dsCard group="Status" height=260 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>StatusTimeline — preview</title><style>.cv-ico{display:block}[data-theme="dark"] .cv-ico{filter:invert(.94)}</style></head>
+<body>
+<div id="root"></div>
+<script>
+  var C = window.Commons, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div',{style:{maxWidth:'360px'}},h(C.StatusTimeline,{steps:[{title:'Reported',date:'3 Nov, 08:14',note:'by a resident',state:'done'},{title:'Sent to Public Works',date:'3 Nov, 09:02',state:'done'},{title:'Crew scheduled',date:'Expected 6 Nov',state:'current'},{title:'Resolved',state:'upcoming'}]})));
+</script>
+</body>
+</html>

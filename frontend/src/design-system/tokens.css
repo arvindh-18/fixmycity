@@ -1,0 +1,93 @@
+/* Generated from design/commons-design-system/tokens.json — do not edit by hand.
+   Regenerate with: python design/build_tokens.py */
+
+:root {
+  color-scheme: light;
+  --paper: #fbfaf7;
+  --paper-raised: #ffffff;
+  --ink: #1d1d1b;
+  --ink-muted: #5c5c57;
+  --rule: #dcdbd4;
+  --line-control: #85857e;
+  --sage-100: #e4efe6;
+  --sage-200: #cfe5d4;
+  --sage-300: #a7ccb0;
+  --green-600: #2f6b41;
+  --on-green: #ffffff;
+  --yellow-200: #f8e7ad;
+  --yellow-400: #f2c94c;
+  --blue-200: #d3e4f4;
+  --blue-500: #5b9bd5;
+  --rose-200: #f7d6d3;
+  --rose-500: #e07a7a;
+  --stone-200: #e9e8e2;
+  --danger: #a3312b;
+  --focus: #1f5fbf;
+  --font-serif: "Libre Baskerville", Baskerville, Georgia, serif;
+  --font-sans: "Work Sans", "Helvetica Neue", Arial, sans-serif;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-12: 48px;
+  --space-16: 64px;
+  --space-24: 96px;
+  --radius-none: 0;
+  --radius-sm: 3px;
+  --radius-pill: 999px;
+  --stroke-hairline: 1px;
+  --stroke-frame: 1.5px;
+  --stroke-focus: 2px;
+}
+
+/* Dark theme: the same roles, deepened tints. Follows the system setting unless the user picks one. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --paper: #171816;
+    --paper-raised: #20221f;
+    --ink: #f0eee8;
+    --ink-muted: #a9a8a1;
+    --rule: #363833;
+    --line-control: #7d7f78;
+    --sage-100: #1f2d24;
+    --sage-200: #24402d;
+    --sage-300: #5f9a6c;
+    --green-600: #8fcf9c;
+    --on-green: #10200f;
+    --yellow-200: #433817;
+    --yellow-400: #d9b23f;
+    --blue-200: #1e3347;
+    --blue-500: #78afe0;
+    --rose-200: #47272a;
+    --rose-500: #e88f8f;
+    --stone-200: #2c2e2a;
+    --danger: #ff9b92;
+    --focus: #8ab8ff;
+  }
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #171816;
+  --paper-raised: #20221f;
+  --ink: #f0eee8;
+  --ink-muted: #a9a8a1;
+  --rule: #363833;
+  --line-control: #7d7f78;
+  --sage-100: #1f2d24;
+  --sage-200: #24402d;
+  --sage-300: #5f9a6c;
+  --green-600: #8fcf9c;
+  --on-green: #10200f;
+  --yellow-200: #433817;
+  --yellow-400: #d9b23f;
+  --blue-200: #1e3347;
+  --blue-500: #78afe0;
+  --rose-200: #47272a;
+  --rose-500: #e88f8f;
+  --stone-200: #2c2e2a;
+  --danger: #ff9b92;
+  --focus: #8ab8ff;
+}

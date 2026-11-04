@@ -1,0 +1,12 @@
+<!-- @dsCard group="Forms" height=190 -->
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>TextField — preview</title><style>.cv-ico{display:block}[data-theme="dark"] .cv-ico{filter:invert(.94)}</style></head>
+<body>
+<div id="root"></div>
+<script>
+  var C = window.Commons, h = React.createElement;
+  ReactDOM.createRoot(document.getElementById('root')).render(h('div',{style:{display:'grid',gridTemplateColumns:'1fr 1fr',gap:'24px',maxWidth:'640px'}},h(C.TextField,{label:'Where is it?',placeholder:'Street, landmark or pin on map',hint:'Nearest cross street helps crews find it.'}),h(C.TextField,{label:'Email address',type:'email',defaultValue:'sam@example',error:'Add the part after the @, like example.com.'})));
+</script>
+</body>
+</html>

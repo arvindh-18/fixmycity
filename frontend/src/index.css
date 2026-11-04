@@ -1,0 +1,146 @@
+@import "tailwindcss";
+@import "./design-system/tokens.css";
+@import "./design-system/commons.css" layer(components);
+@import "maplibre-gl/dist/maplibre-gl.css";
+
+/*
+  Commons design system (design/commons-design-system).
+  The raw tokens live in tokens.css (generated from tokens.json, light + dark). Below, Tailwind's
+  theme names are pointed at those roles so utility classes stay on-system:
+
+    paper / surface → paper          paper-2 → stone-200 (quiet fills, skeletons)
+    ink             → ink            slate, mute → ink-muted
+    line            → rule           line-2 → line-control (control borders)
+    teal            → green-600 (the single action colour)    teal-soft → sage-100
+    status tints    → the badge tints (yellow/stone/blue/sage/rose-200), text colours → ink or danger
+
+  Shape: frames, cards and bands are square; buttons and fields 3px; pills only for status badges.
+  No drop shadows anywhere — separate with lines.
+*/
+@theme inline {
+  --color-paper: var(--paper);
+  --color-paper-2: var(--stone-200);
+  --color-raised: var(--paper-raised);
+  --color-surface: var(--paper);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink);
+  --color-slate: var(--ink-muted);
+  --color-mute: var(--ink-muted);
+  --color-line: var(--rule);
+  --color-line-2: var(--line-control);
+  --color-teal: var(--green-600);
+  --color-teal-soft: var(--sage-100);
+  --color-on-green: var(--on-green);
+  --color-sage-100: var(--sage-100);
+  --color-sage-200: var(--sage-200);
+  --color-sage-300: var(--sage-300);
+  --color-yellow-200: var(--yellow-200);
+  --color-yellow-400: var(--yellow-400);
+  --color-blue-200: var(--blue-200);
+  --color-blue-500: var(--blue-500);
+  --color-rose-200: var(--rose-200);
+  --color-rose-500: var(--rose-500);
+  --color-stone-200: var(--stone-200);
+  --color-danger: var(--danger);
+  --color-focus: var(--focus);
+  --color-red: var(--danger);
+  --color-red-soft: var(--rose-200);
+  --color-amber: var(--ink);
+  --color-amber-soft: var(--yellow-200);
+  --color-green: var(--green-600);
+  --color-green-soft: var(--sage-200);
+  --color-violet: var(--ink);
+  --color-violet-soft: var(--stone-200);
+  --color-orange: var(--ink);
+  --color-orange-soft: var(--blue-200);
+  --color-grey: var(--ink-muted);
+  --color-grey-soft: var(--stone-200);
+  --color-white: var(--paper-raised);
+
+  --font-serif: var(--font-serif);
+  --font-sans: var(--font-sans);
+
+  --radius-xs: 3px;
+  --radius-sm: 3px;
+  --radius-md: 3px;
+  --radius-lg: 0px;
+  --radius-xl: 0px;
+  --radius-2xl: 0px;
+
+  --shadow-card: none;
+  --shadow-float: none;
+}
+
+@layer base {
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    background: var(--paper);
+    color: var(--ink);
+    font: 400 15px/24px var(--font-sans);
+    -webkit-font-smoothing: antialiased;
+  }
+  ::selection { background: var(--yellow-200); color: var(--ink); }
+  /* Focus: 2px solid focus ring, offset 2px, on every interactive element. */
+  :focus-visible { outline: var(--stroke-focus) solid var(--focus); outline-offset: 2px; }
+  h1, h2, h3 { text-wrap: balance; }
+  p { text-wrap: pretty; }
+  button { cursor: pointer; }
+  button:disabled { cursor: not-allowed; }
+  a { text-underline-offset: 3px; }
+}
+
+/* Type scale from tokens.json — use these instead of ad-hoc sizes. */
+@layer components {
+  .t-display { font: 400 40px/50px var(--font-serif); letter-spacing: -0.01em; }
+  .t-display em, .t-h1 em { font-style: italic; }
+  .t-h1 { font: 400 30px/40px var(--font-serif); }
+  .t-h2 { font: 400 22px/30px var(--font-serif); }
+  .t-h3 { font: 700 16px/22px var(--font-serif); }
+  .t-body { font: 400 15px/24px var(--font-sans); }
+  .t-body-sm { font: 400 13px/20px var(--font-sans); }
+  .t-label { font: 500 13px/16px var(--font-sans); }
+  .t-caption { font: 400 11px/16px var(--font-sans); }
+  /* App layout addition: in narrow grid columns the status badge wraps under the card title
+     instead of squeezing it. */
+  .cv-issue-head { flex-wrap: wrap; }
+  .cv-issue-title { flex: 1 1 140px; }
+  /* Short caption rules under a frame (from IssueCard). */
+  .cv-rules { display: flex; flex-direction: column; gap: 4px; }
+  .cv-rules i { display: block; height: 1px; width: 64px; background: var(--ink); }
+  .cv-rules i + i { width: 32px; background: var(--rule); }
+  /* Floating surfaces (menus, sheets, dialogs) are framed, not shadowed. */
+  .cv-float { background: var(--paper); border: var(--stroke-frame) solid var(--ink); }
+  /* Icons are single-ink images; invert in the dark theme. */
+  :root[data-theme="dark"] .cv-ico { filter: invert(.94); }
+  @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .cv-ico { filter: invert(.94); } }
+  @media (max-width: 640px) { .t-display { font-size: 32px; line-height: 40px; } }
+}
+
+@layer utilities {
+  .num { font-variant-numeric: tabular-nums; }
+  .font-display { font-family: var(--font-serif); }
+  .measure { max-width: 60ch; }
+  .scrollbar-thin { scrollbar-width: thin; scrollbar-color: var(--rule) transparent; }
+}
+
+/* Motion: little and quiet. */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; }
+}
+
+/* MapLibre controls restyled to match: square frames, no shadows. */
+.maplibregl-popup-content {
+  border-radius: 0 !important;
+  padding: 0 !important;
+  box-shadow: none !important;
+  border: var(--stroke-frame) solid var(--ink);
+  background: var(--paper) !important;
+  color: var(--ink);
+  font-family: var(--font-sans);
+}
+.maplibregl-popup-tip { display: none; }
+.maplibregl-ctrl-group { border-radius: 3px !important; box-shadow: none !important; border: 1px solid var(--line-control); }
+.maplibregl-ctrl-attrib { font-size: 11px; }
+
+@keyframes shimmer { 0% { opacity: .55; } 50% { opacity: 1; } 100% { opacity: .55; } }
+.skeleton { background: var(--stone-200); animation: shimmer 1.6s ease-in-out infinite; }
