@@ -196,7 +196,7 @@ export default function SignIn() {
       setError("Please enter your password.");
       return;
     }
-    await run(() => signInPhone(clean, password));
+    await run(() => signInPhone(clean, password, name.trim()));
   }
 
   const shownError = error || (ready && !me && authError ? friendlyAuthError(new Error(authError)) : "");
@@ -314,6 +314,19 @@ export default function SignIn() {
       ) : mode === "phone" ? (
         <div className="mt-8">
           <form className="space-y-4" onSubmit={handlePhoneSignIn}>
+            <div>
+              <label className="label" htmlFor="phone-name">
+                Your name
+              </label>
+              <input
+                id="phone-name"
+                className="field"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Arvind Kumar"
+                autoComplete="name"
+              />
+            </div>
             <div>
               <label className="label" htmlFor="phone">
                 Phone number

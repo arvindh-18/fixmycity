@@ -26,7 +26,7 @@ interface AuthState {
   recovery: boolean;
   signInGoogle: (role?: Role, next?: string) => Promise<Me | null>;
   signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me | null>;
-  signInPhone: (phone: string, password: string) => Promise<Me | null>;
+  signInPhone: (phone: string, password: string, name?: string) => Promise<Me | null>;
   signInDemo: (role: Role) => Promise<Me>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
@@ -232,23 +232,27 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         tokenRef.current = data.session.access_token;
         return loadMe();
       },
-      async signInPhone(phone, password) {
+      async signInPhone(phone, password, name) {
         const digits = phone.replace(/[^0-9]/g, "");
         const national = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits;
-        const account = SAMPLE_PHONE_ACCOUNTS[national];
-
-        if (!account || account.password !== password.trim()) {
-          throw new Error("Invalid phone number or password. Try 9876543210 with password 123456.");
+        if (national.length !== 10) {
+          throw new Error("Please enter a valid 10-digit mobile number.");
+        }
+        if (!password || password.trim().length < 6) {
+          throw new Error("Password must be at least 6 characters.");
         }
 
-        // 1. If in Supabase mode, attempt auth with phone email alias
+        const account = SAMPLE_PHONE_ACCOUNTS[national];
+        const displayName = (name && name.trim()) || account?.name || `Resident ${national.slice(-4)}`;
+
+        // 1. If in Supabase mode and client is available, attempt auth with phone email alias
         const client = supabaseRef.current;
         if (client) {
           const email = `phone_${national}@fixmycity.demo`;
           try {
             const { data, error } = await client.auth.signInWithPassword({
               email,
-              password: account.password,
+              password: password.trim(),
             });
             if (!error && data.session) {
               tokenRef.current = data.session.access_token;
@@ -256,8 +260,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
             }
             const su = await client.auth.signUp({
               email,
-              password: account.password,
-              options: { data: { full_name: account.name } },
+              password: password.trim(),
+              options: { data: { full_name: displayName } },
             });
             if (su.data?.session) {
               tokenRef.current = su.data.session.access_token;
@@ -269,7 +273,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
 
         // 2. Local demo token without external services
-        const token = `dev:phone-${national}:${account.name}:0`;
+        const token = `dev:phone-${national}:${displayName}:0`;
         try {
           localStorage.setItem(DEV_KEY, token);
         } catch {
