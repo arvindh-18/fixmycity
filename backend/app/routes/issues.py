@@ -9,7 +9,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
 from .. import geocode
-from ..auth import User, admin_user, current_user, optional_user
+from ..auth import User, admin_user, current_user, optional_user, staff_user
 from ..config import settings
 from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StatusUpdate, Upvote, get_db, now
 
@@ -238,10 +238,15 @@ class StatusIn(BaseModel):
     note: str = ""
 
 
+WORKER_STATUSES = ("in_progress", "resolved")
+
+
 @router.post("/{issue_id}/status")
-def set_status(issue_id: int, body: StatusIn, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+def set_status(issue_id: int, body: StatusIn, db: Session = Depends(get_db), user: User = Depends(staff_user)):
     if body.status not in STATUSES:
         raise HTTPException(422, f"Status must be one of: {', '.join(STATUSES)}.")
+    if user.is_worker and body.status not in WORKER_STATUSES:
+        raise HTTPException(403, "Field workers can mark a report as 'Being fixed' or 'Fixed'. Ask an admin to close or reopen it.")
     issue = _get(db, issue_id)
     if body.status == issue.status and not body.note.strip():
         raise HTTPException(409, "The report already has that status. Add a note to post an update.")

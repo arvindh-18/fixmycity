@@ -14,11 +14,21 @@ export interface AppConfig {
   categories: Category[];
 }
 
+export type Role = "public" | "worker" | "admin";
+
 export interface Me {
   uid: string;
   name: string;
   email: string;
+  role: Role;
   is_admin: boolean;
+}
+
+export interface StaffMember {
+  email: string;
+  role: "worker" | "admin";
+  source: "app" | "env";
+  added_by: string;
 }
 
 export interface Update {

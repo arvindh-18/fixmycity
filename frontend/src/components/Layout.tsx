@@ -1,7 +1,7 @@
 import { LogOut, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, NavLink, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../lib/auth";
+import { homeFor, useAuth } from "../lib/auth";
 
 export function Logo() {
   return (
@@ -41,8 +41,15 @@ function UserMenu() {
           <div className="px-3 py-2">
             <div className="font-semibold truncate">{me.name}</div>
             <div className="text-sm text-ink-3 truncate">{me.email}</div>
-            {me.is_admin && <div className="mt-1 text-xs font-semibold text-civic">City staff — can update status</div>}
+            {me.role !== "public" && (
+              <div className="mt-1 text-xs font-semibold text-civic">{me.is_admin ? "City admin" : "Field worker"}</div>
+            )}
           </div>
+          {me.role !== "public" && (
+            <Link to={homeFor(me.role)} onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-chalk">
+              {me.is_admin ? "Admin dashboard" : "My jobs"}
+            </Link>
+          )}
           <Link to="/issues?mine=1" onClick={() => setOpen(false)} className="block rounded-lg px-3 py-2 hover:bg-chalk">
             My reports
           </Link>
@@ -68,6 +75,10 @@ export function Layout() {
   const link = ({ isActive }: { isActive: boolean }) =>
     `px-3 py-2 rounded-full text-[15px] font-medium transition-colors ${isActive ? "text-ink bg-white" : "text-ink-2 hover:text-ink"}`;
 
+  const staffLink = me && me.role !== "public" && (
+    <NavLink to={homeFor(me.role)} className={link}>{me.is_admin ? "Admin" : "My jobs"}</NavLink>
+  );
+
   return (
     <div className="flex min-h-dvh flex-col">
       <header className={`${home ? "absolute" : "sticky bg-chalk/90 backdrop-blur border-b border-line"} top-0 inset-x-0 z-[1100]`}>
@@ -76,6 +87,7 @@ export function Layout() {
           <nav className="ml-4 hidden sm:flex items-center gap-1">
             <NavLink to="/issues" className={link}>Reports</NavLink>
             <NavLink to="/stats" className={link}>Insights</NavLink>
+            {staffLink}
           </nav>
           <div className="ml-auto flex items-center gap-2">
             <Link to="/report" className="btn-paint btn-sm sm:h-10 sm:px-5">
@@ -87,6 +99,7 @@ export function Layout() {
         <nav className="sm:hidden flex gap-1 px-3 pb-2">
           <NavLink to="/issues" className={link}>Reports</NavLink>
           <NavLink to="/stats" className={link}>Insights</NavLink>
+          {staffLink}
         </nav>
       </header>
       <main className="flex-1">

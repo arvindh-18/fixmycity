@@ -22,6 +22,8 @@ services:
         sync: false
       - key: ADMIN_EMAILS
         sync: false
+      - key: WORKER_EMAILS
+        sync: false
       - key: GEMINI_API_KEY
         sync: false
       - key: CITY_NAME

@@ -8,10 +8,12 @@ import { api, photoSrc } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import type { Issue, Status } from "../lib/types";
 
-function StaffPanel({ issue, onChange }: { issue: Issue; onChange: (i: Issue) => void }) {
+const WORKER_STATUSES: Status[] = ["in_progress", "resolved"];
+
+function StaffPanel({ issue, onChange, admin }: { issue: Issue; onChange: (i: Issue) => void; admin: boolean }) {
   const toast = useToast();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<Status>(issue.status);
+  const [status, setStatus] = useState<Status>(admin || WORKER_STATUSES.includes(issue.status) ? issue.status : "in_progress");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -43,9 +45,11 @@ function StaffPanel({ issue, onChange }: { issue: Issue; onChange: (i: Issue) =>
   return (
     <section className="rounded-[var(--radius-card)] border border-civic/40 bg-civic-soft p-5">
       <h2 className="font-sans text-base font-bold tracking-normal">Post an update</h2>
-      <p className="text-sm text-ink-2">You're signed in as city staff. The reporter and the public see this.</p>
+      <p className="text-sm text-ink-2">
+        You're signed in as {admin ? "a city admin" : "a field worker"}. The reporter and the public see this.
+      </p>
       <div className="mt-4 flex flex-wrap gap-2">
-        {(Object.keys(STATUS) as Status[]).map((s) => (
+        {(admin ? (Object.keys(STATUS) as Status[]) : WORKER_STATUSES).map((s) => (
           <button key={s} type="button" className="chip" aria-pressed={status === s} onClick={() => setStatus(s)}>
             {STATUS[s].label}
           </button>
@@ -60,7 +64,7 @@ function StaffPanel({ issue, onChange }: { issue: Issue; onChange: (i: Issue) =>
       />
       <div className="mt-3 flex items-center gap-2">
         <button onClick={post} disabled={busy} className="btn-ink btn-sm">{busy && <Spinner size={14} />} Post update</button>
-        <button onClick={remove} className="btn btn-sm ml-auto text-danger hover:bg-white"><Trash size={15} /> Delete</button>
+        {admin && <button onClick={remove} className="btn btn-sm ml-auto text-danger hover:bg-white"><Trash size={15} /> Delete</button>}
       </div>
     </section>
   );
@@ -152,7 +156,7 @@ export default function IssueDetail() {
             <button onClick={share} className="btn-ghost h-12"><Link2 size={18} /> Share</button>
           </div>
 
-          {me?.is_admin && <StaffPanel issue={issue} onChange={setIssue} />}
+          {me && me.role !== "public" && <StaffPanel issue={issue} onChange={setIssue} admin={me.is_admin} />}
         </div>
 
         <aside className="space-y-6">

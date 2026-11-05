@@ -20,6 +20,7 @@ from app.main import app  # noqa: E402
 CITIZEN = {"Authorization": "Bearer dev:meera:Meera:0"}
 OTHER = {"Authorization": "Bearer dev:arjun:Arjun:0"}
 ADMIN = {"Authorization": "Bearer dev:admin:FixMyCity Staff:1"}
+WORKER = {"Authorization": "Bearer dev:ravi:Ravi:w"}
 
 
 @pytest.fixture(autouse=True)
@@ -50,13 +51,33 @@ def test_config_and_me():
     assert cfg["auth_mode"] == "dev" and cfg["ai_enabled"]
     assert client.get("/api/me").status_code == 401
     assert client.get("/api/me", headers=ADMIN).json()["is_admin"] is True
+    assert client.get("/api/me", headers=ADMIN).json()["role"] == "admin"
+    assert client.get("/api/me", headers=WORKER).json()["role"] == "worker"
+    assert client.get("/api/me", headers=CITIZEN).json()["role"] == "public"
+
+
+def test_worker_can_mark_fixed_but_not_close_or_delete():
+    iid = report().json()["id"]
+    assert client.post(f"/api/issues/{iid}/status", json={"status": "rejected"}, headers=WORKER).status_code == 403
+    assert client.delete(f"/api/issues/{iid}", headers=WORKER).status_code == 403
+    r = client.post(f"/api/issues/{iid}/status", json={"status": "resolved", "note": "Filled"}, headers=WORKER)
+    assert r.status_code == 200 and r.json()["status"] == "resolved"
+
+
+def test_admin_promotes_resident_to_worker():
+    assert client.get("/api/staff", headers=WORKER).status_code == 403
+    r = client.post("/api/staff", json={"email": "Meera@demo.local", "role": "worker"}, headers=ADMIN)
+    assert r.status_code == 201 and any(m["email"] == "meera@demo.local" for m in r.json())
+    assert client.get("/api/me", headers=CITIZEN).json()["role"] == "worker"
+    client.delete("/api/staff/meera@demo.local", headers=ADMIN)
+    assert client.get("/api/me", headers=CITIZEN).json()["role"] == "public"
 
 
 def test_report_fills_locality_from_pin_and_resizes_photo():
     r = report()
     assert r.status_code == 201, r.text
     issue = r.json()
-    assert issue["locality"] == "Indiranagar" and issue["pincode"] == "560038"
+    assert issue["locality"] == "T. Nagar" and issue["pincode"] == "600017"
     assert issue["is_mine"] and issue["updates"][0]["status"] == "open"
     img = Image.open(io.BytesIO(client.get(issue["photo_url"]).content))
     assert max(img.size) <= 1400
@@ -70,11 +91,11 @@ def test_report_requires_sign_in_and_valid_category():
 def test_browse_by_pincode_and_locality():
     report()
     report(locality="Koramangala", pincode="560034")
-    assert len(client.get("/api/issues", params={"pincode": "560038"}).json()) == 1
+    assert len(client.get("/api/issues", params={"pincode": "600017"}).json()) == 1
     assert len(client.get("/api/issues", params={"locality": "koramangala"}).json()) == 1
-    assert len(client.get("/api/issues", params={"q": "5600"}).json()) == 2
+    assert len(client.get("/api/issues", params={"q": "600017"}).json()) == 1
     areas = client.get("/api/issues/areas").json()
-    assert {a["pincode"] for a in areas} == {"560038", "560034"}
+    assert {a["pincode"] for a in areas} == {"600017", "560034"}
 
 
 def test_upvote_toggles_once_per_person():
@@ -88,7 +109,7 @@ def test_only_admin_changes_status_and_stats_follow():
     assert client.post(f"/api/issues/{iid}/status", json={"status": "resolved"}, headers=CITIZEN).status_code == 403
     r = client.post(f"/api/issues/{iid}/status", json={"status": "resolved", "note": "Patched"}, headers=ADMIN)
     assert r.status_code == 200 and r.json()["resolved_at"]
-    s = client.get("/api/stats", params={"pincode": "560038"}).json()
+    s = client.get("/api/stats", params={"pincode": "600017"}).json()
     assert s["total"] == 1 and s["resolved"] == 1 and s["resolved_pct"] == 100
 
 
