@@ -1,4 +1,4 @@
-import { HardHat, ShieldCheck, User } from "lucide-react";
+import { HardHat, Phone, ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { Spinner } from "../components/ui";
@@ -54,6 +54,13 @@ const ROLES: { id: Role; label: string; icon: typeof User; title: string; blurb:
 
 const ROLE_NAME: Record<Role, string> = { public: "resident", worker: "field worker", admin: "city admin" };
 
+/** Sample credentials shown on the sign-in page. */
+const SAMPLE_ACCOUNTS: { role: Role; email: string; password: string }[] = [
+  { role: "public", email: "resident@fixmycity.demo", password: "resident123" },
+  { role: "worker", email: "worker@fixmycity.demo", password: "worker123" },
+  { role: "admin", email: "admin@fixmycity.demo", password: "admin123" },
+];
+
 export default function SignIn() {
   const {
     config,
@@ -63,6 +70,8 @@ export default function SignIn() {
     recovery,
     signInGoogle,
     signInEmail,
+    signInPhone,
+    verifyPhoneOtp,
     signInDemo,
     signOut,
     sendPasswordReset,
@@ -72,16 +81,20 @@ export default function SignIn() {
   const navigate = useNavigate();
   const nextParam = params.get("next");
   const [role, setRole] = useState<Role>((params.get("as") as Role) || "public");
-  const [mode, setMode] = useState<"signin" | "create" | "forgot" | "reset">(() => {
+  const [mode, setMode] = useState<"signin" | "create" | "forgot" | "reset" | "phone">(() => {
     return params.get("reset") === "1" ? "reset" : "signin";
   });
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [phone, setPhone] = useState("");
+  const [otp, setOtp] = useState("");
+  const [otpSent, setOtpSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [infoNote, setInfoNote] = useState("");
   const current = ROLES.find((r) => r.id === role) ?? ROLES[0];
+  const sampleForRole = SAMPLE_ACCOUNTS.find((s) => s.role === role);
 
   useEffect(() => {
     if (recovery || params.get("reset") === "1") {
@@ -92,6 +105,8 @@ export default function SignIn() {
   useEffect(() => {
     setError("");
     setInfoNote("");
+    setOtpSent(false);
+    setOtp("");
   }, [mode, role]);
 
   // Handle post-redirect / auto-navigation (with role verification for ?as= across redirects)
@@ -172,6 +187,32 @@ export default function SignIn() {
     }
   }
 
+  async function handleSendOtp(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmed = phone.trim();
+    if (!trimmed) return;
+    setBusy(true);
+    setError("");
+    setInfoNote("");
+    try {
+      await signInPhone(trimmed);
+      setOtpSent(true);
+      setInfoNote("We sent an OTP to your phone number.");
+    } catch (e) {
+      setError(friendlyAuthError(e));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function handleVerifyOtp(e: React.FormEvent) {
+    e.preventDefault();
+    const trimmedPhone = phone.trim();
+    const trimmedOtp = otp.trim();
+    if (!trimmedPhone || !trimmedOtp) return;
+    await run(() => verifyPhoneOtp(trimmedPhone, trimmedOtp));
+  }
+
   const shownError = error || (ready && !me ? authError : "");
 
   return (
@@ -203,14 +244,18 @@ export default function SignIn() {
             ? "Reset your password"
             : mode === "reset"
               ? "Set new password"
-              : current.title}
+              : mode === "phone"
+                ? "Sign in with phone"
+                : current.title}
       </h1>
       <p className="mt-2 text-ink-2">
         {mode === "forgot"
           ? "Enter your email and we'll send you a link to reset your password."
           : mode === "reset"
             ? "Choose a new password with at least 6 characters."
-            : current.blurb}
+            : mode === "phone"
+              ? "We'll send an OTP to your phone number."
+              : current.blurb}
       </p>
 
       {!config ? (
@@ -280,18 +325,85 @@ export default function SignIn() {
             </button>
           </form>
         </div>
+      ) : mode === "phone" ? (
+        <div className="mt-8">
+          {!otpSent ? (
+            <form className="space-y-4" onSubmit={handleSendOtp}>
+              <div>
+                <label className="label" htmlFor="phone">
+                  Phone number
+                </label>
+                <input
+                  id="phone"
+                  type="tel"
+                  className="field"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  required
+                  placeholder="+91 98765 43210"
+                  autoComplete="tel"
+                />
+                <p className="mt-1 text-xs text-ink-3">Include country code, e.g. +91 for India.</p>
+              </div>
+              <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
+                {busy && <Spinner size={16} />} Send OTP
+              </button>
+            </form>
+          ) : (
+            <form className="space-y-4" onSubmit={handleVerifyOtp}>
+              <div>
+                <label className="label" htmlFor="otp">
+                  Enter OTP
+                </label>
+                <input
+                  id="otp"
+                  type="text"
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  className="field"
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value)}
+                  required
+                  maxLength={6}
+                  autoComplete="one-time-code"
+                  placeholder="6-digit code"
+                />
+              </div>
+              <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
+                {busy && <Spinner size={16} />} Verify & sign in
+              </button>
+              <button
+                type="button"
+                className="w-full text-center text-sm font-semibold text-civic hover:underline"
+                onClick={() => { setOtpSent(false); setOtp(""); }}
+              >
+                Use a different number
+              </button>
+            </form>
+          )}
+          <p className="mt-5 text-center text-sm text-ink-2">
+            <button className="font-semibold text-civic hover:underline" onClick={() => setMode("signin")}>
+              Sign in with email instead
+            </button>
+          </p>
+        </div>
       ) : (
         <div className="mt-8">
-          <button
-            className="btn-ghost h-12 w-full bg-white"
-            disabled={busy}
-            onClick={() => run(() => signInGoogle(role, nextParam || undefined))}
-          >
-            <GoogleMark /> Continue with Google
-          </button>
-          <div className="my-6 flex items-center gap-3 text-sm text-ink-3">
-            <span className="h-px flex-1 bg-line" /> or with email <span className="h-px flex-1 bg-line" />
-          </div>
+          {/* Google sign-in — only for Resident tab */}
+          {role === "public" && (
+            <>
+              <button
+                className="btn-ghost h-12 w-full bg-white"
+                disabled={busy}
+                onClick={() => run(() => signInGoogle(role, nextParam || undefined))}
+              >
+                <GoogleMark /> Continue with Google
+              </button>
+              <div className="my-6 flex items-center gap-3 text-sm text-ink-3">
+                <span className="h-px flex-1 bg-line" /> or with email <span className="h-px flex-1 bg-line" />
+              </div>
+            </>
+          )}
           <form
             className="space-y-4"
             onSubmit={(e) => {
@@ -358,19 +470,50 @@ export default function SignIn() {
               {busy && <Spinner size={16} />} {mode === "create" ? "Create account" : "Sign in"}
             </button>
           </form>
-          <p className="mt-5 text-center text-sm text-ink-2">
-            {mode === "create"
-              ? "Already have an account? "
-              : role === "public"
-                ? "New here? "
-                : "First time? Your admin must add your email, then "}
-            <button
-              className="font-semibold text-civic hover:underline"
-              onClick={() => setMode(mode === "create" ? "signin" : "create")}
-            >
-              {mode === "create" ? "Sign in" : "Create an account"}
-            </button>
-          </p>
+
+          {/* Phone OTP link */}
+          <button
+            type="button"
+            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:bg-chalk"
+            onClick={() => setMode("phone")}
+          >
+            <Phone size={16} /> Sign in with phone OTP
+          </button>
+
+          {/* Create account / sign in toggle — hidden for admin role (admins are pre-created) */}
+          {role !== "admin" && (
+            <p className="mt-5 text-center text-sm text-ink-2">
+              {mode === "create"
+                ? "Already have an account? "
+                : role === "public"
+                  ? "New here? "
+                  : "First time? Your admin must add your email, then "}
+              <button
+                className="font-semibold text-civic hover:underline"
+                onClick={() => setMode(mode === "create" ? "signin" : "create")}
+              >
+                {mode === "create" ? "Sign in" : "Create an account"}
+              </button>
+            </p>
+          )}
+          {role === "admin" && (
+            <p className="mt-5 text-center text-xs text-ink-3">
+              Admin accounts are created by an existing admin. Contact your city admin if you need access.
+            </p>
+          )}
+
+          {/* Sample credentials hint */}
+          {sampleForRole && (
+            <div className="mt-6 rounded-xl border border-line bg-chalk px-4 py-3">
+              <p className="mb-1 text-xs font-semibold text-ink-2">Sample {ROLE_NAME[role]} login</p>
+              <p className="font-mono text-sm text-ink">
+                {sampleForRole.email}
+              </p>
+              <p className="font-mono text-sm text-ink">
+                {sampleForRole.password}
+              </p>
+            </div>
+          )}
         </div>
       )}
       {infoNote && (

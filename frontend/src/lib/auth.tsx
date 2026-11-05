@@ -20,6 +20,8 @@ interface AuthState {
   recovery: boolean;
   signInGoogle: (role?: Role, next?: string) => Promise<Me | null>;
   signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me | null>;
+  signInPhone: (phone: string) => Promise<void>;
+  verifyPhoneOtp: (phone: string, otp: string) => Promise<Me | null>;
   signInDemo: (role: Role) => Promise<Me>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
@@ -222,6 +224,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           password,
         });
         if (error) throw error;
+        tokenRef.current = data.session.access_token;
+        return loadMe();
+      },
+      async signInPhone(phone) {
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+        const { error } = await client.auth.signInWithOtp({ phone });
+        if (error) throw error;
+      },
+      async verifyPhoneOtp(phone, otp) {
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+        const { data, error } = await client.auth.verifyOtp({
+          phone,
+          token: otp,
+          type: "sms",
+        });
+        if (error) throw error;
+        if (!data.session) return null;
         tokenRef.current = data.session.access_token;
         return loadMe();
       },
