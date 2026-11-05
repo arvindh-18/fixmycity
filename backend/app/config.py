@@ -45,9 +45,9 @@ class Settings:
     gemini_model = _env("GEMINI_MODEL", "gemini-3.6-flash")
 
     # Map defaults + OpenStreetMap Nominatim (geocoding)
-    city_name = _env("CITY_NAME", "Bengaluru")
-    city_lat = float(_env("CITY_LAT", "12.9716"))
-    city_lng = float(_env("CITY_LNG", "77.5946"))
+    city_name = _env("CITY_NAME", "Chennai")
+    city_lat = float(_env("CITY_LAT", "13.0827"))
+    city_lng = float(_env("CITY_LNG", "80.2707"))
     country_codes = _env("COUNTRY_CODES", "in")
     nominatim_url = _env("NOMINATIM_URL", "https://nominatim.openstreetmap.org")
     nominatim_contact = _env("NOMINATIM_CONTACT", "")

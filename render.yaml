@@ -25,11 +25,11 @@ services:
       - key: GEMINI_API_KEY
         sync: false
       - key: CITY_NAME
-        value: Bengaluru
+        value: Chennai
       - key: CITY_LAT
-        value: "12.9716"
+        value: "13.0827"
       - key: CITY_LNG
-        value: "77.5946"
+        value: "80.2707"
 
 databases:
   - name: fixmycity-db

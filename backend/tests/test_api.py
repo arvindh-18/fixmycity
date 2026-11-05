@@ -27,7 +27,7 @@ def fresh_db(monkeypatch):
     Base.metadata.drop_all(engine)
     Base.metadata.create_all(engine)
     monkeypatch.setattr(geocode, "_reverse", lambda lat, lng: {
-        "address": "100 Feet Rd, Indiranagar", "locality": "Indiranagar", "pincode": "560038", "city": "Bengaluru"})
+        "address": "Pondy Bazaar, T. Nagar", "locality": "T. Nagar", "pincode": "600017", "city": "Chennai"})
     yield
 
 

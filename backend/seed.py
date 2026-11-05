@@ -1,4 +1,4 @@
-"""Add ~40 sample reports around Bengaluru so the map and stats aren't empty during a demo.
+"""Add ~40 sample reports around Chennai so the map and stats aren't empty during a demo.
 
     python seed.py          # add sample data (skips if samples already exist)
     python seed.py --reset  # delete ALL reports, then add samples
@@ -10,16 +10,18 @@ from datetime import timedelta
 from app.db import Issue, SessionLocal, StatusUpdate, Upvote, init_db, now
 
 AREAS = [
-    ("Indiranagar", "560038", 12.9719, 77.6412),
-    ("Koramangala", "560034", 12.9352, 77.6245),
-    ("HSR Layout", "560102", 12.9116, 77.6474),
-    ("Jayanagar", "560041", 12.9250, 77.5938),
-    ("Whitefield", "560066", 12.9698, 77.7500),
-    ("Malleshwaram", "560003", 13.0035, 77.5710),
-    ("BTM Layout", "560076", 12.9166, 77.6101),
-    ("Basavanagudi", "560004", 12.9421, 77.5754),
-    ("Hebbal", "560024", 13.0358, 77.5970),
-    ("Marathahalli", "560037", 12.9591, 77.6974),
+    ("T. Nagar", "600017", 13.0418, 80.2341),
+    ("Adyar", "600020", 13.0012, 80.2565),
+    ("Mylapore", "600004", 13.0368, 80.2676),
+    ("Anna Nagar", "600040", 13.0850, 80.2101),
+    ("Velachery", "600042", 12.9759, 80.2212),
+    ("Nungambakkam", "600034", 13.0569, 80.2425),
+    ("Besant Nagar", "600090", 13.0002, 80.2667),
+    ("Guindy", "600032", 13.0067, 80.2025),
+    ("Alwarpet", "600018", 13.0336, 80.2515),
+    ("Thiruvanmiyur", "600041", 12.9830, 80.2594),
+    ("Royapettah", "600014", 13.0524, 80.2612),
+    ("Kodambakkam", "600024", 13.0529, 80.2238),
 ]
 
 SAMPLES = [
@@ -76,7 +78,7 @@ def main(reset: bool) -> None:
         issue = Issue(
             title=title, description=desc, category=cat, severity=sev, status=status,
             lat=lat + rng.uniform(-0.008, 0.008), lng=lng + rng.uniform(-0.008, 0.008),
-            address=f"{locality}, Bengaluru, Karnataka {pin}", locality=locality, pincode=pin,
+            address=f"{locality}, Chennai, Tamil Nadu {pin}", locality=locality, pincode=pin,
             reporter_uid="seed", reporter_name=rng.choice(names), upvotes=rng.randint(0, 34),
             created_at=created, updated_at=created,
         )

@@ -50,8 +50,8 @@ export default function Browse() {
   }, [pincode, locality]);
 
   const area = [locality, pincode].filter(Boolean).join(" ");
-  const heading = mine ? "My reports" : area ? `Reports in ${area}` : `Reports in ${config?.city.name ?? "your city"}`;
-  const center: [number, number] = [config?.city.lat ?? 12.97, config?.city.lng ?? 77.59];
+  const heading = mine ? "My reports" : area ? `Reports in ${area}` : `Reports in ${config?.city.name ?? "Chennai"}`;
+  const center: [number, number] = [config?.city.lat ?? 13.0827, config?.city.lng ?? 80.2707];
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6">

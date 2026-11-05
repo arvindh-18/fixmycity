@@ -36,7 +36,7 @@ export default function Report() {
   const [lang, setLang] = useState("en-IN");
   const voiceBase = useRef<string | null>(null);
 
-  const city = config?.city ?? { lat: 12.9716, lng: 77.5946, name: "" };
+  const city = config?.city ?? { lat: 13.0827, lng: 80.2707, name: "Chennai" };
   const [pos, setPos] = useState<[number, number]>([city.lat, city.lng]);
   const [pinMoved, setPinMoved] = useState(false);
   const [place, setPlace] = useState<Place>({ address: "", locality: "", pincode: "" });
@@ -52,6 +52,13 @@ export default function Report() {
   const [error, setError] = useState("");
 
   useEffect(() => () => void (preview && URL.revokeObjectURL(preview)), [preview]);
+
+  // Update default coordinates when config loads if the user hasn't moved the pin
+  useEffect(() => {
+    if (!pinMoved && config?.city) {
+      setPos([config.city.lat, config.city.lng]);
+    }
+  }, [config, pinMoved]);
 
   // Try the device location once.
   useEffect(() => {

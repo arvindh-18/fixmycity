@@ -28,7 +28,7 @@ backend/
     gemini.py      photo → draft report, voice → text
     geocode.py     pin → locality + pincode (OpenStreetMap Nominatim)
     routes/        issues.py (CRUD, +1, status, nearby, areas) · misc.py (config, AI, geo, stats)
-  seed.py          ~40 sample reports around Bengaluru
+  seed.py          ~40 sample reports around Chennai
   tests/           pytest, runs on SQLite
 frontend/src/
   pages/           Home, Report, Browse, IssueDetail, Stats, SignIn
