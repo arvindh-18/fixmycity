@@ -132,6 +132,21 @@ def test_near_returns_issues_sorted_by_distance_with_filters():
     assert [r["id"] for r in active] == [rows[1]["id"]]
 
 
+def test_chat_only_for_reporter_and_staff_with_unread_counts():
+    iid = report().json()["id"]
+    assert client.get(f"/api/issues/{iid}/messages", headers=OTHER).status_code == 403
+    assert client.post(f"/api/issues/{iid}/messages", json={"body": "hi"}, headers=OTHER).status_code == 403
+    r = client.post(f"/api/issues/{iid}/messages", json={"body": "Crew coming Thursday"}, headers=WORKER)
+    assert r.status_code == 201 and r.json()["sender_role"] == "worker"
+    mine = client.get("/api/issues", params={"mine": True}, headers=CITIZEN).json()
+    assert mine[0]["unread"] == 1
+    msgs = client.get(f"/api/issues/{iid}/messages", headers=CITIZEN).json()
+    assert [m["body"] for m in msgs] == ["Crew coming Thursday"] and not msgs[0]["is_mine"]
+    assert client.get("/api/issues", params={"mine": True}, headers=CITIZEN).json()[0]["unread"] == 0
+    client.post(f"/api/issues/{iid}/messages", json={"body": "Thanks!"}, headers=CITIZEN)
+    assert len(client.get(f"/api/issues/{iid}/messages", params={"after": msgs[0]["id"]}, headers=ADMIN).json()) == 1
+
+
 def test_ai_analyze_uses_gemini(monkeypatch):
     monkeypatch.setattr(gemini, "_call", lambda parts, schema=None:
                         '{"is_civic_issue": true, "category": "pothole", "title": "Pothole", '

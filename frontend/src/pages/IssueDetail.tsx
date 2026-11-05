@@ -3,6 +3,7 @@ import { AttributionControl, MapContainer, Marker, TileLayer } from "react-leafl
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { OSM_ATTR, OSM_TILES, statusIcon } from "../components/IssueMap";
+import { Messages } from "../components/Messages";
 import { CategoryIcon, SeverityText, Spinner, STATUS, StatusPill, timeAgo, useToast } from "../components/ui";
 import { api, photoSrc } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -157,6 +158,7 @@ export default function IssueDetail() {
           </div>
 
           {me && me.role !== "public" && <StaffPanel issue={issue} onChange={setIssue} admin={me.is_admin} />}
+          {me && (me.role !== "public" || issue.is_mine) && <Messages issueId={issue.id} />}
         </div>
 
         <aside className="space-y-6">

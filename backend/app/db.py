@@ -113,6 +113,29 @@ class Upvote(Base):
     uid: Mapped[str] = mapped_column(String(128))
 
 
+class Message(Base):
+    """Chat on a report between its reporter, field workers and admins."""
+    __tablename__ = "messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), index=True)
+    sender_uid: Mapped[str] = mapped_column(String(128))
+    sender_name: Mapped[str] = mapped_column(String(120), default="")
+    sender_role: Mapped[str] = mapped_column(String(16), default="public")
+    body: Mapped[str] = mapped_column(Text)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class MessageRead(Base):
+    __tablename__ = "message_reads"
+    __table_args__ = (UniqueConstraint("issue_id", "uid"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), index=True)
+    uid: Mapped[str] = mapped_column(String(128), index=True)
+    last_read_message_id: Mapped[int] = mapped_column(Integer, default=0)
+
+
 ROLES = ("public", "worker", "admin")
 
 
