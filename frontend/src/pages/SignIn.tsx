@@ -187,17 +187,31 @@ export default function SignIn() {
     }
   }
 
+  function formatPhone(raw: string): string {
+    const digits = raw.replace(/[^0-9]/g, "");
+    if (digits.length === 12 && digits.startsWith("91")) {
+      return `+${digits}`;
+    }
+    if (digits.length === 10) {
+      return `+91${digits}`;
+    }
+    return digits.startsWith("+") ? digits : `+${digits}`;
+  }
+
   async function handleSendOtp(e: React.FormEvent) {
     e.preventDefault();
-    const trimmed = phone.trim();
-    if (!trimmed) return;
+    const formatted = formatPhone(phone);
+    if (!phone.trim() || formatted.length < 12) {
+      setError("Please enter a valid 10-digit mobile number.");
+      return;
+    }
     setBusy(true);
     setError("");
     setInfoNote("");
     try {
-      await signInPhone(trimmed);
+      await signInPhone(formatted);
       setOtpSent(true);
-      setInfoNote("We sent an OTP to your phone number.");
+      setInfoNote(`We sent an OTP to ${formatted}.`);
     } catch (e) {
       setError(friendlyAuthError(e));
     } finally {
@@ -207,10 +221,10 @@ export default function SignIn() {
 
   async function handleVerifyOtp(e: React.FormEvent) {
     e.preventDefault();
-    const trimmedPhone = phone.trim();
+    const formatted = formatPhone(phone);
     const trimmedOtp = otp.trim();
-    if (!trimmedPhone || !trimmedOtp) return;
-    await run(() => verifyPhoneOtp(trimmedPhone, trimmedOtp));
+    if (!formatted || !trimmedOtp) return;
+    await run(() => verifyPhoneOtp(formatted, trimmedOtp));
   }
 
   const shownError = error || (ready && !me ? authError : "");
@@ -333,17 +347,23 @@ export default function SignIn() {
                 <label className="label" htmlFor="phone">
                   Phone number
                 </label>
-                <input
-                  id="phone"
-                  type="tel"
-                  className="field"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  required
-                  placeholder="+91 98765 43210"
-                  autoComplete="tel"
-                />
-                <p className="mt-1 text-xs text-ink-3">Include country code, e.g. +91 for India.</p>
+                <div className="flex items-center rounded-xl border border-line bg-white transition-colors focus-within:border-ink">
+                  <span className="flex items-center border-r border-line py-3 pl-3.5 pr-2.5 text-sm font-semibold text-ink-2 select-none">
+                    +91
+                  </span>
+                  <input
+                    id="phone"
+                    type="tel"
+                    className="w-full bg-transparent px-3 py-3 text-base text-ink outline-none placeholder:text-ink-3"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ""))}
+                    required
+                    maxLength={10}
+                    placeholder="98765 43210"
+                    autoComplete="tel-national"
+                  />
+                </div>
+                <p className="mt-1 text-xs text-ink-3">Enter your 10-digit Indian mobile number.</p>
               </div>
               <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
                 {busy && <Spinner size={16} />} Send OTP
