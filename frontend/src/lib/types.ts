@@ -29,6 +29,7 @@ export interface StaffMember {
   role: "worker" | "admin";
   source: "app" | "env";
   added_by: string;
+  open_jobs: number;
 }
 
 export interface Update {
@@ -84,6 +85,7 @@ export interface Stats {
   resolved_pct: number;
   avg_days_to_fix: number | null;
   this_week: number;
+  fixed_this_week: number;
   by_category: { category: string; label: string; count: number }[];
   top_areas: { locality: string; pincode: string; count: number }[];
 }

@@ -9,7 +9,7 @@ from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
 from .. import duplicates, geocode
-from ..auth import User, admin_user, current_user, optional_user, staff_user
+from ..auth import User, admin_user, current_user, optional_user, role_for_email, staff_user
 from ..config import settings
 from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StatusUpdate, Upvote, get_db, now
 
@@ -82,7 +82,9 @@ def list_issues(
     status: str = Query("", description="open | in_progress | resolved | rejected | active"),
     category: str = "",
     mine: bool = False,
-    sort: str = Query("new", pattern="^(new|top)$"),
+    worker: str = Query("", description="'me': jobs assigned to or fixed by the signed-in worker"),
+    unassigned: bool = False,
+    sort: str = Query("new", pattern="^(new|top|fixed)$"),
     limit: int = Query(300, le=1000),
     db: Session = Depends(get_db),
     user: User | None = Depends(optional_user),
@@ -106,7 +108,16 @@ def list_issues(
         if not user:
             raise HTTPException(401, "Sign in to see your reports.")
         stmt = stmt.where(Issue.reporter_uid == user.uid)
-    order = (Issue.upvotes.desc(), Issue.created_at.desc()) if sort == "top" else (Issue.created_at.desc(),)
+    if worker == "me":
+        if not user or not user.is_staff:
+            raise HTTPException(403, "Only field workers have a job list.")
+        stmt = stmt.where(or_(Issue.assigned_to_email == user.email, Issue.fixed_by_email == user.email))
+    if unassigned:
+        stmt = stmt.where(or_(Issue.assigned_to_email.is_(None), Issue.assigned_to_email == ""))
+    order = {
+        "top": (Issue.upvotes.desc(), Issue.created_at.desc()),
+        "fixed": (Issue.resolved_at.desc(), Issue.created_at.desc()),
+    }.get(sort, (Issue.created_at.desc(),))
     issues = db.scalars(stmt.order_by(*order).limit(limit)).all()
     voted = _voted(db, user, [i.id for i in issues])
     from .messages import unread_counts  # local import: messages imports this module
@@ -247,6 +258,14 @@ def get_photo(issue_id: int, db: Session = Depends(get_db)):
     return Response(issue.photo, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
 
 
+@router.get("/{issue_id}/after-photo")
+def get_after_photo(issue_id: int, db: Session = Depends(get_db)):
+    issue = db.scalar(select(Issue).options(undefer(Issue.after_photo)).where(Issue.id == issue_id))
+    if not issue or not issue.after_photo:
+        raise HTTPException(404, "No after photo")
+    return Response(issue.after_photo, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
+
+
 @router.post("/{issue_id}/upvote")
 def toggle_upvote(issue_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     issue = _get(db, issue_id)
@@ -276,12 +295,54 @@ def set_status(issue_id: int, body: StatusIn, db: Session = Depends(get_db), use
     if user.is_worker and body.status not in WORKER_STATUSES:
         raise HTTPException(403, "Field workers can mark a report as 'Being fixed' or 'Fixed'. Ask an admin to close or reopen it.")
     issue = _get(db, issue_id)
+    if user.is_worker and body.status == "resolved" and not issue.has_after_photo:
+        raise HTTPException(422, "Add an 'after' photo to mark this fixed. Use the Mark fixed button.")
     if body.status == issue.status and not body.note.strip():
         raise HTTPException(409, "The report already has that status. Add a note to post an update.")
     issue.status = body.status
     issue.updated_at = now()
     issue.resolved_at = now() if body.status == "resolved" else None
+    if body.status == "resolved":
+        issue.fixed_by_email = user.email
     issue.updates.append(StatusUpdate(status=body.status, note=body.note.strip(), by_name=user.name))
+    db.commit()
+    return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
+
+
+@router.post("/{issue_id}/fix")
+async def mark_fixed(issue_id: int, photo: UploadFile = File(...), note: str = Form("", max_length=1000),
+                     db: Session = Depends(get_db), user: User = Depends(staff_user)):
+    """Field worker marks a job fixed with an 'after' photo as proof."""
+    issue = _get(db, issue_id)
+    if issue.status == "rejected":
+        raise HTTPException(409, "This report was closed. Ask an admin to reopen it first.")
+    raw = await photo.read()
+    if len(raw) > settings.max_upload_mb * 1024 * 1024:
+        raise HTTPException(413, f"Photo is larger than {settings.max_upload_mb} MB.")
+    issue.after_photo, issue.has_after_photo = _process_photo(raw), 1
+    issue.status, issue.updated_at, issue.resolved_at = "resolved", now(), now()
+    issue.fixed_by_email = user.email
+    issue.updates.append(StatusUpdate(status="resolved", note=note.strip() or "Fixed. See the after photo.", by_name=user.name))
+    db.commit()
+    return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
+
+
+class AssignIn(BaseModel):
+    email: str = ""
+
+
+@router.post("/{issue_id}/assign")
+def assign(issue_id: int, body: AssignIn, db: Session = Depends(get_db), user: User = Depends(admin_user)):
+    issue = _get(db, issue_id)
+    email = body.email.strip().lower()
+    if email and role_for_email(email) == "public":
+        raise HTTPException(422, "That email isn't on the team. Add it under Admin → Team first.")
+    if (issue.assigned_to_email or "") == email:
+        return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
+    issue.assigned_to_email = email or None
+    issue.updated_at = now()
+    note = f"Assigned to {email}." if email else "Unassigned."
+    issue.updates.append(StatusUpdate(status=issue.status, note=note, by_name=user.name))
     db.commit()
     return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
 

@@ -3,6 +3,7 @@ import { AttributionControl, MapContainer, Marker, TileLayer } from "react-leafl
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { OSM_ATTR, OSM_TILES, statusIcon } from "../components/IssueMap";
+import { FixSheet } from "../components/FixSheet";
 import { Messages } from "../components/Messages";
 import { CategoryIcon, SeverityText, Spinner, STATUS, StatusPill, timeAgo, useToast } from "../components/ui";
 import { api, photoSrc } from "../lib/api";
@@ -17,8 +18,11 @@ function StaffPanel({ issue, onChange, admin }: { issue: Issue; onChange: (i: Is
   const [status, setStatus] = useState<Status>(admin || WORKER_STATUSES.includes(issue.status) ? issue.status : "in_progress");
   const [note, setNote] = useState("");
   const [busy, setBusy] = useState(false);
+  const [fixing, setFixing] = useState(false);
 
   async function post() {
+    // Workers prove a fix with an after photo, so "Fixed" opens the photo sheet.
+    if (!admin && status === "resolved" && !issue.after_photo_url) return setFixing(true);
     setBusy(true);
     try {
       const updated = await api<Issue>(`/api/issues/${issue.id}/status`, { body: { status, note } });
@@ -67,6 +71,11 @@ function StaffPanel({ issue, onChange, admin }: { issue: Issue; onChange: (i: Is
         <button onClick={post} disabled={busy} className="btn-ink btn-sm">{busy && <Spinner size={14} />} Post update</button>
         {admin && <button onClick={remove} className="btn btn-sm ml-auto text-danger hover:bg-white"><Trash size={15} /> Delete</button>}
       </div>
+      <p className="mt-3 text-sm text-ink-2">
+        {issue.assigned_to_email ? <>Assigned to <span className="font-semibold">{issue.assigned_to_email}</span></> : "Not assigned to anyone yet."}
+        {admin && <> · <Link to="/admin" className="text-civic hover:underline">Assign from the admin page</Link></>}
+      </p>
+      {fixing && <FixSheet issue={issue} onClose={() => setFixing(false)} onDone={(i) => (setFixing(false), onChange(i))} />}
     </section>
   );
 }
@@ -134,7 +143,19 @@ export default function IssueDetail() {
 
       <div className="mt-4 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-6">
-          {src && (
+          {issue.after_photo_url ? (
+            <div className="grid grid-cols-2 gap-2">
+              {[{ label: "Before", url: src }, { label: "After", url: photoSrc(issue.after_photo_url) }].map((p) => (
+                <figure key={p.label} className="relative overflow-hidden rounded-[var(--radius-card)] border border-line bg-chalk">
+                  {p.url ? <img src={p.url} alt={`${p.label}: ${issue.title}`} className="aspect-[4/3] w-full object-cover" /> :
+                    <div className="flex aspect-[4/3] items-center justify-center text-sm text-ink-3">No photo</div>}
+                  <figcaption className={`absolute left-2 top-2 rounded-full px-2.5 py-0.5 text-xs font-bold text-white ${p.label === "After" ? "bg-st-fixed" : "bg-ink/80"}`}>
+                    {p.label}
+                  </figcaption>
+                </figure>
+              ))}
+            </div>
+          ) : src && (
             <div className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-white">
               <img src={src} alt={issue.title} className="max-h-[520px] w-full object-cover" />
             </div>
