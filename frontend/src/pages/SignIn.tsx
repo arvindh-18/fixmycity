@@ -1,7 +1,9 @@
+import { HardHat, ShieldCheck, User } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Navigate, useSearchParams } from "react-router-dom";
+import { Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Spinner } from "../components/ui";
-import { friendlyAuthError, useAuth } from "../lib/auth";
+import { friendlyAuthError, homeFor, useAuth } from "../lib/auth";
+import type { Me, Role } from "../lib/types";
 
 function GoogleMark() {
   return (
@@ -14,28 +16,51 @@ function GoogleMark() {
   );
 }
 
+const ROLES: { id: Role; label: string; icon: typeof User; title: string; blurb: string }[] = [
+  { id: "public", label: "Resident", icon: User, title: "Sign in",
+    blurb: "So you can report problems, +1 your neighbours' reports and follow them until they're fixed." },
+  { id: "worker", label: "Field worker", icon: HardHat, title: "Worker sign in",
+    blurb: "See the jobs near you, mark them as being fixed and upload proof when they're done." },
+  { id: "admin", label: "City admin", icon: ShieldCheck, title: "Admin sign in",
+    blurb: "Review reports, assign workers, merge duplicates and track how fast problems get fixed." },
+];
+
+const ROLE_NAME: Record<Role, string> = { public: "resident", worker: "field worker", admin: "city admin" };
+
 export default function SignIn() {
-  const { config, me, ready, signInGoogle, signInEmail, signInDemo } = useAuth();
+  const { config, me, ready, authError, signInGoogle, signInEmail, signInDemo, signOut } = useAuth();
   const [params] = useSearchParams();
-  const next = params.get("next") || "/report";
+  const navigate = useNavigate();
+  const nextParam = params.get("next");
+  const [role, setRole] = useState<Role>((params.get("as") as Role) || "public");
   const [mode, setMode] = useState<"signin" | "create">("signin");
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const current = ROLES.find((r) => r.id === role) ?? ROLES[0];
 
   useEffect(() => {
     setError("");
-  }, [mode]);
+  }, [mode, role]);
 
-  if (ready && me) return <Navigate to={next} replace />;
+  if (ready && me && !busy) return <Navigate to={nextParam || homeFor(me.role)} replace />;
 
-  async function run(fn: () => Promise<void>) {
+  async function run(fn: () => Promise<Me>) {
     setBusy(true);
     setError("");
     try {
-      await fn();
+      const signedIn = await fn();
+      // Worker/admin tabs only let in accounts that actually have that role.
+      if (role !== "public" && signedIn.role !== role && signedIn.role !== "admin") {
+        await signOut();
+        setError(
+          `${signedIn.email} isn't registered as a ${ROLE_NAME[role]}. Ask a city admin to add this email under Admin → Team.`,
+        );
+        return;
+      }
+      navigate(nextParam || homeFor(signedIn.role), { replace: true });
     } catch (e) {
       setError(friendlyAuthError(e));
     } finally {
@@ -43,10 +68,30 @@ export default function SignIn() {
     }
   }
 
+  const shownError = error || (ready && !me ? authError : "");
+
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-16">
-      <h1 className="text-[clamp(30px,5vw,40px)] font-extrabold">{mode === "create" ? "Create your account" : "Sign in"}</h1>
-      <p className="mt-2 text-ink-2">So you can report problems, +1 your neighbours' reports and follow them until they're fixed.</p>
+      <div role="tablist" aria-label="Sign in as" className="mb-8 grid grid-cols-3 gap-1 rounded-2xl border border-line bg-white p-1">
+        {ROLES.map((r) => (
+          <button
+            key={r.id}
+            role="tab"
+            aria-selected={role === r.id}
+            onClick={() => setRole(r.id)}
+            className={`flex flex-col items-center gap-1 rounded-xl px-2 py-2.5 text-[13px] font-semibold transition-colors ${
+              role === r.id ? "bg-ink text-white" : "text-ink-2 hover:bg-chalk"
+            }`}
+          >
+            <r.icon size={18} aria-hidden /> {r.label}
+          </button>
+        ))}
+      </div>
+
+      <h1 className="text-[clamp(30px,5vw,40px)] font-extrabold">
+        {mode === "create" ? "Create your account" : current.title}
+      </h1>
+      <p className="mt-2 text-ink-2">{current.blurb}</p>
 
       {!config ? (
         <div className="py-10 text-ink-3"><Spinner /></div>
@@ -55,8 +100,9 @@ export default function SignIn() {
           <p className="rounded-xl bg-st-open-soft px-4 py-3 text-sm">
             Demo mode: Firebase isn't configured on this server yet, so you can sign in with one click.
           </p>
-          <button className="btn-ink w-full h-12" disabled={busy} onClick={() => run(() => signInDemo(false))}>Continue as a resident</button>
-          <button className="btn-ghost w-full h-12" disabled={busy} onClick={() => run(() => signInDemo(true))}>Continue as city staff</button>
+          <button className="btn-ink w-full h-12" disabled={busy} onClick={() => run(() => signInDemo(role))}>
+            {busy && <Spinner size={16} />} Continue as a demo {ROLE_NAME[role]}
+          </button>
         </div>
       ) : config.auth_mode === "none" ? (
         <p className="mt-8 rounded-xl bg-st-open-soft px-4 py-3 text-sm">Sign-in isn't configured on this server. Set the FIREBASE_* variables.</p>
@@ -72,7 +118,7 @@ export default function SignIn() {
             className="space-y-4"
             onSubmit={(e) => {
               e.preventDefault();
-              run(() => signInEmail(email, password, mode === "create", name));
+              run(() => signInEmail(email.trim(), password, mode === "create", name));
             }}
           >
             {mode === "create" && (
@@ -95,14 +141,14 @@ export default function SignIn() {
             </button>
           </form>
           <p className="mt-5 text-center text-sm text-ink-2">
-            {mode === "create" ? "Already have an account? " : "New here? "}
+            {mode === "create" ? "Already have an account? " : role === "public" ? "New here? " : "First time? Your admin must add your email, then "}
             <button className="font-semibold text-civic hover:underline" onClick={() => setMode(mode === "create" ? "signin" : "create")}>
               {mode === "create" ? "Sign in" : "Create an account"}
             </button>
           </p>
         </div>
       )}
-      {error && <p className="mt-4 text-sm font-medium text-danger" role="alert">{error}</p>}
+      {shownError && <p className="mt-4 text-sm font-medium text-danger" role="alert">{shownError}</p>}
     </div>
   );
 }

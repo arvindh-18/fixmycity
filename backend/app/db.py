@@ -103,6 +103,19 @@ class Upvote(Base):
     uid: Mapped[str] = mapped_column(String(128))
 
 
+ROLES = ("public", "worker", "admin")
+
+
+class StaffMember(Base):
+    """Workers and admins added from the admin screen (on top of ADMIN_EMAILS / WORKER_EMAILS)."""
+    __tablename__ = "staff"
+
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    role: Mapped[str] = mapped_column(String(16), default="worker")
+    added_by: Mapped[str] = mapped_column(String(120), default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
 

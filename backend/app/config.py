@@ -39,6 +39,8 @@ class Settings:
 
     # Comma-separated emails that can change issue status.
     admin_emails = {e.strip().lower() for e in _env("ADMIN_EMAILS").split(",") if e.strip()}
+    # Comma-separated emails of field workers (servicemen). Admins can also add workers from the app.
+    worker_emails = {e.strip().lower() for e in _env("WORKER_EMAILS").split(",") if e.strip()}
 
     # Gemini
     gemini_api_key = _env("GEMINI_API_KEY")
