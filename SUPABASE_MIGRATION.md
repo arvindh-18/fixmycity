@@ -90,3 +90,4 @@ If you need to revert:
 - Redeploy the `pre-supabase` git tag.
 - Restore the `FIREBASE_*` environment variables.
 - The only database change introduced was one standalone `legacy_uids` table, which is ignored by earlier code. Rollback is safe and does not modify or delete civic data.
+
