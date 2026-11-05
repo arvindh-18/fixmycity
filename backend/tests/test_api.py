@@ -154,3 +154,25 @@ def test_ai_analyze_uses_gemini(monkeypatch):
     r = client.post("/api/ai/analyze", files={"photo": ("p.jpg", jpeg(), "image/jpeg")}, headers=CITIZEN)
     assert r.status_code == 200
     assert r.json()["category"] == "pothole" and r.json()["severity"] == "medium"
+
+
+def test_ai_structure_validates_and_keeps_original_text(monkeypatch):
+    seen = {}
+
+    def fake(parts, schema=None):
+        seen["prompt"] = parts[0]["text"]
+        return ('{"is_civic_issue": true, "category": "spaceship", "title": "Garbage pile near school", '
+                '"description": "Garbage not cleared for a week.", "severity": "extreme", "landmark": "Govt school", '
+                '"original_language": "ta", "translated_text": "Garbage near the school for a week"}')
+
+    monkeypatch.setattr(gemini, "_call", fake)
+    text = "பள்ளி அருகே ஒரு வாரமாக குப்பை"
+    r = client.post("/api/ai/structure", json={"text": text, "lang": "ta"}, headers=CITIZEN)
+    assert r.status_code == 200, r.text
+    d = r.json()
+    assert d["category"] == "other" and d["severity"] == "medium" and d["landmark"] == "Govt school"
+    assert d["original_language"] == "ta" and "Tamil" in seen["prompt"] and text in seen["prompt"]
+    assert client.post("/api/ai/structure", json={"text": text, "lang": "fr"}, headers=CITIZEN).status_code == 422
+    assert client.post("/api/ai/structure", json={"text": text}).status_code == 401
+    issue = report(original_text=text).json()
+    assert issue["original_text"] == text

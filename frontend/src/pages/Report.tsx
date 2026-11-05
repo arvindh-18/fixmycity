@@ -1,4 +1,4 @@
-import { ImagePlus, LocateFixed, RefreshCw, Search, Sparkles, ThumbsUp, X } from "lucide-react";
+import { ImagePlus, LocateFixed, RefreshCw, Search, Sparkles, ThumbsUp, Wand2, X } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { loadAreas } from "../components/AreaSearch";
@@ -8,9 +8,16 @@ import { VOICE_LANGS, VoiceButton } from "../components/VoiceButton";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { shrinkImage } from "../lib/image";
-import type { AiDraft, Issue, Severity } from "../lib/types";
+import type { AiDraft, AiStructured, Issue, Severity } from "../lib/types";
 
 type Place = { address: string; locality: string; pincode: string };
+
+// Languages Gemini structures reports from (speech + text).
+const STORY_LANGS = [
+  { code: "en-IN", api: "en", label: "English" },
+  { code: "ta-IN", api: "ta", label: "தமிழ்" },
+  { code: "hi-IN", api: "hi", label: "हिन्दी" },
+] as const;
 
 const SEVERITIES: { id: Severity; label: string }[] = [
   { id: "low", label: "Can wait" },
@@ -35,6 +42,13 @@ export default function Report() {
   const [severity, setSeverity] = useState<Severity>("medium");
   const [lang, setLang] = useState("en-IN");
   const voiceBase = useRef<string | null>(null);
+
+  // "Describe it in your words" → Gemini fills the form.
+  const [story, setStory] = useState("");
+  const [storyLang, setStoryLang] = useState<(typeof STORY_LANGS)[number]["code"]>("en-IN");
+  const storyBase = useRef<string | null>(null);
+  const [structuring, setStructuring] = useState(false);
+  const [structured, setStructured] = useState<AiStructured | null>(null);
 
   const city = config?.city ?? { lat: 13.0827, lng: 80.2707, name: "Chennai" };
   const [pos, setPos] = useState<[number, number]>([city.lat, city.lng]);
@@ -132,6 +146,28 @@ export default function Report() {
     }
   }
 
+  async function fillFromStory() {
+    if (story.trim().length < 3) return toast("Say or type a few words about the problem first.", "err");
+    setStructuring(true);
+    try {
+      const lang = STORY_LANGS.find((l) => l.code === storyLang)!.api;
+      const d = await api<AiStructured>("/api/ai/structure", { body: { text: story, lang } });
+      setStructured(d);
+      setCategory(d.category);
+      setTitle(d.title);
+      setSeverity(d.severity);
+      const landmark = d.landmark && !d.description.toLowerCase().includes(d.landmark.toLowerCase()) ? ` Near ${d.landmark}.` : "";
+      setDescription(d.description + landmark);
+      if (!d.is_civic_issue) toast("This doesn't sound like a street or public problem, but you can still submit it.", "err");
+      // With a photo too, let Gemini combine both: the photo read uses the structured text as a note.
+      if (photo) await readPhoto(photo, d.translated_text);
+    } catch (e) {
+      toast((e as Error).message, "err");
+    } finally {
+      setStructuring(false);
+    }
+  }
+
   async function onFile(file: File | undefined) {
     if (!file) return;
     if (!file.type.startsWith("image/")) return toast("Choose an image file (JPG, PNG or WebP).", "err");
@@ -175,7 +211,7 @@ export default function Report() {
       const fd = new FormData();
       Object.entries({
         title, category, description, severity, lat: pos[0], lng: pos[1],
-        address: place.address, locality: place.locality, pincode: place.pincode,
+        address: place.address, locality: place.locality, pincode: place.pincode, original_text: story.trim(),
       }).forEach(([k, v]) => fd.append(k, String(v)));
       if (photo) fd.append("photo", photo, "photo.jpg");
       const issue = await api<Issue>("/api/issues", { body: fd });
@@ -262,6 +298,57 @@ export default function Report() {
               </p>
             )}
           </section>
+
+          {config?.ai_enabled && (
+            <section className="rounded-[var(--radius-card)] border border-line bg-white p-4">
+              <div className="flex flex-wrap items-center gap-2">
+                <label htmlFor="story" className="mr-auto text-sm font-semibold">Describe it in your words</label>
+                <div className="inline-flex rounded-full border border-line-2 p-0.5" role="radiogroup" aria-label="Language">
+                  {STORY_LANGS.map((l) => (
+                    <button key={l.code} type="button" role="radio" aria-checked={storyLang === l.code} onClick={() => setStoryLang(l.code)}
+                      className={`h-8 rounded-full px-3 text-sm font-semibold ${storyLang === l.code ? "bg-ink text-white" : "text-ink-2"}`}>
+                      {l.label}
+                    </button>
+                  ))}
+                </div>
+                <VoiceButton
+                  lang={storyLang}
+                  aiEnabled={!!config?.ai_enabled}
+                  onText={(t, final) => {
+                    if (storyBase.current === null) storyBase.current = story.trim() ? story.trimEnd() + " " : "";
+                    setStory(storyBase.current + t);
+                    if (final) storyBase.current = null;
+                  }}
+                  onError={(m) => toast(m, "err")}
+                />
+              </div>
+              <textarea
+                id="story"
+                rows={3}
+                className="field mt-3 resize-y"
+                value={story}
+                onChange={(e) => setStory(e.target.value)}
+                placeholder={storyLang === "ta-IN" ? "எ.கா. பேருந்து நிறுத்தம் அருகே பெரிய குழி, ஒரு வாரமாக இருக்கிறது"
+                  : storyLang === "hi-IN" ? "जैसे: बस स्टॉप के पास बड़ा गड्ढा है, एक हफ्ते से"
+                  : "e.g. Big pothole near the bus stop on 2nd Main, been there a week, bikes keep slipping"}
+              />
+              <div className="mt-3 flex flex-wrap items-center gap-3">
+                <button type="button" onClick={fillFromStory} disabled={structuring || reading} className="btn-ink btn-sm h-10">
+                  {structuring ? <Spinner size={15} /> : <Wand2 size={16} />} {structuring ? "Filling in…" : "Fill the form for me"}
+                </button>
+                <span className="text-xs text-ink-3">Speak or type in English, தமிழ் or हिन्दी. You can edit everything after.</span>
+              </div>
+              {structured && (
+                <details className="mt-3 text-sm">
+                  <summary className="cursor-pointer font-medium text-civic">What you said</summary>
+                  <p className="mt-2 whitespace-pre-line text-ink-2">{story}</p>
+                  {structured.original_language !== "en" && (
+                    <p className="mt-2 text-ink-3"><span className="font-medium">In English:</span> {structured.translated_text}</p>
+                  )}
+                </details>
+              )}
+            </section>
+          )}
 
           <section>
             <span className="label">What kind of problem?</span>

@@ -106,6 +106,17 @@ async def analyze(photo: UploadFile = File(...), note: str = Form(""), user: Use
     return gemini.analyze_photo(data, photo.content_type or "image/jpeg", note)
 
 
+class StructureIn(BaseModel):
+    text: str = Field(..., min_length=3, max_length=3000)
+    lang: str = Field("en", pattern="^(en|ta|hi)$")
+
+
+@router.post("/ai/structure")
+def structure(body: StructureIn, user: User = Depends(current_user)):
+    """Free text / transcribed voice in English, Tamil or Hindi → a structured report draft (in English)."""
+    return gemini.structure_text(body.text, body.lang)
+
+
 @router.post("/ai/transcribe")
 async def transcribe(audio: UploadFile = File(...), user: User = Depends(current_user)):
     data = await audio.read()

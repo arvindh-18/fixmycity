@@ -195,6 +195,7 @@ async def create_issue(
     address: str = Form(""),
     locality: str = Form(""),
     pincode: str = Form(""),
+    original_text: str = Form("", max_length=3000),
     photo: UploadFile | None = File(None),
     db: Session = Depends(get_db),
     user: User = Depends(current_user),
@@ -222,7 +223,7 @@ async def create_issue(
     issue = Issue(
         title=title.strip(), description=description.strip(), category=category, severity=severity,
         lat=lat, lng=lng, address=address[:300], locality=locality.strip()[:120], pincode=pincode.strip()[:12],
-        photo=photo_bytes, has_photo=1 if photo_bytes else 0,
+        photo=photo_bytes, has_photo=1 if photo_bytes else 0, original_text=original_text.strip(),
         reporter_uid=user.uid, reporter_name=user.name,
     )
     issue.updates.append(StatusUpdate(status="open", note="Reported", by_name=user.name))

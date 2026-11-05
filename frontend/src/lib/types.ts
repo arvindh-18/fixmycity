@@ -95,3 +95,9 @@ export interface AiDraft {
   description: string;
   severity: Severity;
 }
+
+export interface AiStructured extends AiDraft {
+  landmark: string;
+  original_language: "en" | "ta" | "hi" | "mixed";
+  translated_text: string;
+}

@@ -143,6 +143,12 @@ export default function IssueDetail() {
               Reported by {issue.is_mine ? "you" : issue.reporter_name} {timeAgo(issue.created_at)}
             </p>
             {issue.description && <p className="mt-5 max-w-[65ch] whitespace-pre-line text-[17px] leading-relaxed">{issue.description}</p>}
+            {issue.original_text && issue.original_text !== issue.description && (
+              <details className="mt-3 max-w-[65ch] text-sm">
+                <summary className="cursor-pointer font-medium text-civic">In the reporter's own words</summary>
+                <p className="mt-2 whitespace-pre-line text-ink-2">{issue.original_text}</p>
+              </details>
+            )}
           </div>
 
           <div className="flex flex-wrap gap-3">
