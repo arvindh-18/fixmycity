@@ -8,7 +8,7 @@ from pydantic import BaseModel
 from sqlalchemy import case, func, or_, select
 from sqlalchemy.orm import Session, undefer
 
-from .. import geocode
+from .. import duplicates, geocode
 from ..auth import User, admin_user, current_user, optional_user, staff_user
 from ..config import settings
 from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StatusUpdate, Upvote, get_db, now
@@ -229,7 +229,8 @@ async def create_issue(
     issue.updates.append(StatusUpdate(status="open", note="Reported", by_name=user.name))
     db.add(issue)
     db.commit()
-    return serialize(issue, user, detail=True)
+    flags = duplicates.flag(db, issue)
+    return {**serialize(issue, user, detail=True), "likely_duplicate_of": [f.candidate_id for f in flags]}
 
 
 @router.get("/{issue_id}")

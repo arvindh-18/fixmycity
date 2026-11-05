@@ -125,6 +125,13 @@ export default function IssueDetail() {
         <ArrowLeft size={16} /> Back
       </button>
 
+      {issue.merged_into && (
+        <Link to={`/issues/${issue.merged_into}`} className="mt-4 block rounded-xl border border-paint bg-[#FDF7E3] px-4 py-3 text-[15px]">
+          This report was merged into <span className="font-semibold text-civic underline">#{issue.merged_into}</span> because it's the same problem.
+          Follow that one for updates.
+        </Link>
+      )}
+
       <div className="mt-4 grid gap-8 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
         <div className="space-y-6">
           {src && (

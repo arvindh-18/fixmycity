@@ -214,9 +214,11 @@ export default function Report() {
         address: place.address, locality: place.locality, pincode: place.pincode, original_text: story.trim(),
       }).forEach(([k, v]) => fd.append(k, String(v)));
       if (photo) fd.append("photo", photo, "photo.jpg");
-      const issue = await api<Issue>("/api/issues", { body: fd });
+      const issue = await api<Issue & { likely_duplicate_of?: number[] }>("/api/issues", { body: fd });
       loadAreas(true);
-      toast("Report submitted. You can follow it here.");
+      toast(issue.likely_duplicate_of?.length
+        ? `Report submitted. It looks like #${issue.likely_duplicate_of[0]}, so city staff may merge them.`
+        : "Report submitted. You can follow it here.");
       navigate(`/issues/${issue.id}`);
     } catch (e) {
       setError((e as Error).message);
@@ -512,7 +514,11 @@ export default function Report() {
 
           {nearby.length > 0 && (
             <div className="rounded-[var(--radius-card)] border border-paint bg-[#FDF7E3] p-4">
-              <p className="font-semibold">Already reported here?</p>
+              <p className="font-semibold">
+                {category && nearby[0]?.category === category && (nearby[0].distance_m ?? 999) <= 100
+                  ? `This looks like #${nearby[0].id}. +1 it instead?`
+                  : "Already reported here?"}
+              </p>
               <p className="text-sm text-ink-2">
                 {nearby.length === 1 ? "There's an open report" : `There are ${nearby.length} open reports`} within 150 m. If it's
                 the same problem, add a +1 instead.
