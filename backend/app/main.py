@@ -9,7 +9,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .db import init_db
-from .routes import issues, misc
+from .routes import issues, messages, misc
 
 
 
@@ -28,6 +28,7 @@ app.add_middleware(
 )
 app.include_router(misc.router)
 app.include_router(issues.router)
+app.include_router(messages.router)
 
 
 # ---- Frontend (only when it has been built into ./static or ../frontend/dist) ----

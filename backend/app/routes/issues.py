@@ -109,7 +109,9 @@ def list_issues(
     order = (Issue.upvotes.desc(), Issue.created_at.desc()) if sort == "top" else (Issue.created_at.desc(),)
     issues = db.scalars(stmt.order_by(*order).limit(limit)).all()
     voted = _voted(db, user, [i.id for i in issues])
-    return [serialize(i, user, voted) for i in issues]
+    from .messages import unread_counts  # local import: messages imports this module
+    unread = unread_counts(db, user, issues)
+    return [{**serialize(i, user, voted), "unread": unread.get(i.id, 0)} for i in issues]
 
 
 def _distance_m(lat1, lng1, lat2, lng2) -> float:

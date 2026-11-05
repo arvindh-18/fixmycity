@@ -1,4 +1,4 @@
-import { ThumbsUp } from "lucide-react";
+import { MessageCircle, ThumbsUp } from "lucide-react";
 import { Link } from "react-router-dom";
 import { photoSrc } from "../lib/api";
 import type { Issue } from "../lib/types";
@@ -49,6 +49,12 @@ export function IssueCard({
           {issue.upvotes > 0 && (
             <span className={`inline-flex items-center gap-1 ${issue.upvoted ? "text-civic font-semibold" : "text-ink-3"}`}>
               <ThumbsUp size={13} /> {issue.upvotes}
+            </span>
+          )}
+          {!!issue.unread && (
+            <span className="inline-flex items-center gap-1 rounded-full bg-danger px-2 py-px text-[12px] font-bold text-white"
+              aria-label={`${issue.unread} new messages`}>
+              <MessageCircle size={12} /> {issue.unread} new
             </span>
           )}
         </div>
