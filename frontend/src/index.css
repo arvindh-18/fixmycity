@@ -1,0 +1,104 @@
+@import "tailwindcss";
+@import "leaflet/dist/leaflet.css";
+@import "@fontsource-variable/bricolage-grotesque/opsz.css";
+@import "@fontsource-variable/public-sans/index.css";
+
+@theme {
+  --color-chalk: #f6f7f4;
+  --color-paper: #ffffff;
+  --color-ink: #1e272c;
+  --color-ink-2: #4c5961;
+  --color-ink-3: #7c8a92;
+  --color-line: #dfe3e1;
+  --color-line-2: #c9cfcc;
+  --color-paint: #f2c230;
+  --color-paint-deep: #d9a915;
+  --color-civic: #2b5ba8;
+  --color-civic-soft: #e6edf8;
+  --color-st-open: #d9772b;
+  --color-st-open-soft: #fbeee2;
+  --color-st-progress: #2b5ba8;
+  --color-st-progress-soft: #e6edf8;
+  --color-st-fixed: #2f8f5b;
+  --color-st-fixed-soft: #e3f3ea;
+  --color-st-closed: #7c8a92;
+  --color-st-closed-soft: #eceeed;
+  --color-danger: #c23b30;
+
+  --font-display: "Bricolage Grotesque Variable", ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Public Sans Variable", ui-sans-serif, system-ui, sans-serif;
+
+  --radius-card: 14px;
+  --shadow-lift: 0 1px 2px rgb(30 39 44 / 0.06), 0 8px 24px -12px rgb(30 39 44 / 0.18);
+}
+
+html {
+  scroll-behavior: smooth;
+  -webkit-text-size-adjust: 100%;
+}
+@media (prefers-reduced-motion: reduce) {
+  html { scroll-behavior: auto; }
+}
+
+body {
+  background: var(--color-chalk);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1, h2, h3, .font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.02em;
+  line-height: 1.05;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-civic);
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* ---- Reusable bits ------------------------------------------------------ */
+@utility btn {
+  @apply inline-flex items-center justify-center gap-2 rounded-full px-5 h-11 text-[15px] font-semibold transition-colors select-none disabled:opacity-50 disabled:pointer-events-none;
+}
+@utility btn-paint { @apply btn bg-paint text-ink hover:bg-paint-deep; }
+@utility btn-ink { @apply btn bg-ink text-white hover:bg-ink-2; }
+@utility btn-ghost { @apply btn bg-transparent text-ink border border-line-2 hover:bg-white; }
+@utility btn-sm { @apply h-9 px-4 text-sm; }
+@utility field {
+  @apply w-full rounded-xl border border-line-2 bg-white px-3.5 py-2.5 text-[15px] text-ink placeholder:text-ink-3 outline-none transition focus:border-civic focus:ring-4 focus:ring-civic/15;
+}
+@utility label { @apply block text-sm font-semibold text-ink mb-1.5; }
+@utility card { @apply rounded-[var(--radius-card)] bg-white border border-line; }
+@utility chip {
+  @apply inline-flex items-center gap-1.5 rounded-full border border-line-2 bg-white px-3 h-9 text-sm font-medium text-ink-2 transition hover:border-ink-3 cursor-pointer;
+  &[aria-pressed="true"] { @apply bg-ink text-white border-ink; }
+}
+
+/* ---- Leaflet tune-up: quieter OSM tiles so the pins carry the colour ---- */
+.leaflet-container { font-family: var(--font-sans); background: #e9ece9; }
+.map-soft .leaflet-tile-pane { filter: saturate(0.45) contrast(0.96) brightness(1.03); }
+.leaflet-control-attribution { font-size: 10px; background: rgb(255 255 255 / 0.8) !important; }
+.leaflet-popup-content-wrapper { border-radius: 12px; box-shadow: var(--shadow-lift); }
+.leaflet-popup-content { margin: 10px 12px; }
+.leaflet-bar a { color: var(--color-ink) !important; }
+
+.pin {
+  width: 18px; height: 18px; border-radius: 999px;
+  border: 3px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / 0.35);
+}
+.pin.is-active { transform: scale(1.35); box-shadow: 0 0 0 6px rgb(43 91 168 / 0.25); }
+
+/* Skeleton shimmer used while Gemini reads the photo */
+.shimmer {
+  background: linear-gradient(90deg, #eceeed 0%, #f7f8f7 50%, #eceeed 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.2s linear infinite;
+  border-radius: 8px;
+}
+@keyframes shimmer { to { background-position: -200% 0; } }
+@media (prefers-reduced-motion: reduce) { .shimmer { animation: none; } }
