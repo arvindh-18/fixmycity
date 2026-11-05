@@ -144,7 +144,7 @@ Interactive docs at `/docs`.
 
 ## Ideas for later
 
-Email/WhatsApp updates to the reporter · before/after photos when fixed · ward boundaries from open data ·
+Email/WhatsApp updates to the reporter · before/after photos when fixed · locality boundaries from open data ·
 heatmap layer · auto-routing to departments · PWA offline drafts.
 
 Map data © OpenStreetMap contributors. Please keep usage light on the public tile and Nominatim servers, or point

@@ -83,15 +83,15 @@ def main(reset: bool) -> None:
         issue.updates.append(StatusUpdate(status="open", note="Reported", by_name=issue.reporter_name, created_at=created))
         if status in ("in_progress", "resolved"):
             t = created + timedelta(days=rng.uniform(0.3, 2))
-            issue.updates.append(StatusUpdate(status="in_progress", note=rng.choice(NOTES["in_progress"]), by_name="BBMP Ward Office", created_at=t))
+            issue.updates.append(StatusUpdate(status="in_progress", note=rng.choice(NOTES["in_progress"]), by_name="FixMyCity Operations", created_at=t))
             issue.updated_at = t
         if status == "resolved":
             t = issue.updated_at + timedelta(days=rng.uniform(0.5, 6))
             t = min(t, now())
-            issue.updates.append(StatusUpdate(status="resolved", note=rng.choice(NOTES["resolved"]), by_name="BBMP Ward Office", created_at=t))
+            issue.updates.append(StatusUpdate(status="resolved", note=rng.choice(NOTES["resolved"]), by_name="FixMyCity Operations", created_at=t))
             issue.updated_at = issue.resolved_at = t
         if status == "rejected":
-            issue.updates.append(StatusUpdate(status="rejected", note="Duplicate of an existing report.", by_name="BBMP Ward Office", created_at=created + timedelta(hours=5)))
+            issue.updates.append(StatusUpdate(status="rejected", note="Duplicate of an existing report.", by_name="FixMyCity Operations", created_at=created + timedelta(hours=5)))
         db.add(issue)
     db.commit()
     print("Added 42 sample reports.")

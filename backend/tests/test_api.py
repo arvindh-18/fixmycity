@@ -19,7 +19,7 @@ from app.main import app  # noqa: E402
 
 CITIZEN = {"Authorization": "Bearer dev:meera:Meera:0"}
 OTHER = {"Authorization": "Bearer dev:arjun:Arjun:0"}
-ADMIN = {"Authorization": "Bearer dev:admin:Ward Office:1"}
+ADMIN = {"Authorization": "Bearer dev:admin:FixMyCity Staff:1"}
 
 
 @pytest.fixture(autouse=True)

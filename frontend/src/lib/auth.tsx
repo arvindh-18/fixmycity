@@ -92,11 +92,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       async signInDemo(admin) {
         try {
-          localStorage.setItem(DEV_KEY, admin ? "dev:admin:Ward Office:1" : "dev:resident:Demo Resident:0");
+          localStorage.setItem(DEV_KEY, admin ? "dev:admin:FixMyCity Staff:1" : "dev:resident:Demo Resident:0");
         } catch {
           /* private mode: token lives only for this page */
         }
-        const token = admin ? "dev:admin:Ward Office:1" : "dev:resident:Demo Resident:0";
+        const token = admin ? "dev:admin:FixMyCity Staff:1" : "dev:resident:Demo Resident:0";
         setTokenGetter(async () => readDev() ?? token);
         await refreshMe();
       },
