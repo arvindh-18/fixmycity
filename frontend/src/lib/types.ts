@@ -7,8 +7,8 @@ export interface Category {
 }
 
 export interface AppConfig {
-  auth_mode: "firebase" | "dev" | "none";
-  firebase: { apiKey: string; authDomain: string; projectId: string; appId: string } | null;
+  auth_mode: "supabase" | "dev" | "none";
+  supabase: { url: string; anonKey: string } | null;
   ai_enabled: boolean;
   city: { name: string; lat: number; lng: number };
   categories: Category[];

@@ -1,5 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import type { Auth } from "firebase/auth";
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import { api, loadConfig, setTokenGetter } from "./api";
 import type { AppConfig, Me, Role } from "./types";
 
@@ -7,12 +16,14 @@ interface AuthState {
   config: AppConfig | null;
   me: Me | null;
   ready: boolean;
-  /** Set when Firebase signed in but our server rejected the token (otherwise sign-in would fail silently). */
   authError: string;
-  signInGoogle: () => Promise<Me>;
-  signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me>;
+  recovery: boolean;
+  signInGoogle: (role?: Role, next?: string) => Promise<Me | null>;
+  signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me | null>;
   signInDemo: (role: Role) => Promise<Me>;
   signOut: () => Promise<void>;
+  sendPasswordReset: (email: string) => Promise<void>;
+  setNewPassword: (password: string) => Promise<void>;
 }
 
 const Ctx = createContext<AuthState | null>(null);
@@ -23,6 +34,23 @@ const DEV_TOKENS: Record<Role, string> = {
   worker: "dev:worker:Demo Worker:w",
   admin: "dev:admin:FixMyCity Staff:1",
 };
+
+let clientInstance: SupabaseClient | null = null;
+
+async function getSupabaseClient(url: string, anonKey: string): Promise<SupabaseClient> {
+  if (!clientInstance) {
+    const { createClient } = await import("@supabase/supabase-js");
+    clientInstance = createClient(url, anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: true,
+        flowType: "pkce",
+      },
+    });
+  }
+  return clientInstance;
+}
 
 function readDev(): string | null {
   try {
@@ -42,17 +70,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<Me | null>(null);
   const [ready, setReady] = useState(false);
   const [authError, setAuthError] = useState("");
-  const authRef = useRef<Auth | null>(null);
+  const [recovery, setRecovery] = useState(false);
 
-  // Throws on failure so callers can show the reason instead of silently doing nothing.
+  const supabaseRef = useRef<SupabaseClient | null>(null);
+  const tokenRef = useRef<string | null>(null);
+  const lastLoadedUidRef = useRef<string | null>(null);
+
   const loadMe = useCallback(async () => {
     try {
       const m = await api<Me>("/api/me");
       setMe(m);
+      lastLoadedUidRef.current = m.uid;
       setAuthError("");
       return m;
     } catch (e) {
       setMe(null);
+      lastLoadedUidRef.current = null;
       setAuthError((e as Error).message);
       throw e;
     }
@@ -60,24 +93,72 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let unsub = () => {};
+
     loadConfig()
       .then(async (cfg) => {
         setConfig(cfg);
-        if (cfg.auth_mode === "firebase" && cfg.firebase) {
-          // Firebase is only loaded when the server is configured for it.
-          const { initializeApp } = await import("firebase/app");
-          const fa = await import("firebase/auth");
-          const auth = fa.getAuth(initializeApp(cfg.firebase));
-          authRef.current = auth;
-          setTokenGetter(async () => (auth.currentUser ? auth.currentUser.getIdToken() : null));
-          unsub = fa.onAuthStateChanged(auth, async (u) => {
-            if (u) await loadMe().catch(() => {});
-            else setMe(null);
-            setReady(true);
+
+        if (cfg.auth_mode === "supabase" && cfg.supabase) {
+          const supabase = await getSupabaseClient(cfg.supabase.url, cfg.supabase.anonKey);
+          supabaseRef.current = supabase;
+
+          setTokenGetter(async () => {
+            if (tokenRef.current) return tokenRef.current;
+            try {
+              const { data } = await supabase.auth.getSession();
+              tokenRef.current = data.session?.access_token ?? null;
+              return tokenRef.current;
+            } catch {
+              return null;
+            }
           });
+
+          const {
+            data: { subscription },
+          } = supabase.auth.onAuthStateChange((event, session) => {
+            tokenRef.current = session?.access_token ?? null;
+
+            if (event === "PASSWORD_RECOVERY") {
+              setRecovery(true);
+            }
+
+            if (event === "SIGNED_OUT") {
+              tokenRef.current = null;
+              lastLoadedUidRef.current = null;
+              setMe(null);
+              setReady(true);
+              return;
+            }
+
+            if (event === "TOKEN_REFRESHED") {
+              return;
+            }
+
+            // Defer loadMe to avoid synchronous calls inside auth state listener
+            setTimeout(() => {
+              if (session?.user) {
+                // Avoid redundant loadMe if same user is already loaded
+                if (lastLoadedUidRef.current !== session.user.id) {
+                  loadMe()
+                    .catch(() => {})
+                    .finally(() => setReady(true));
+                } else {
+                  setReady(true);
+                }
+              } else {
+                setMe(null);
+                lastLoadedUidRef.current = null;
+                setReady(true);
+              }
+            }, 0);
+          });
+
+          unsub = () => subscription.unsubscribe();
         } else if (cfg.auth_mode === "dev") {
           setTokenGetter(async () => readDev());
-          if (readDev()) await loadMe().catch(() => {});
+          if (readDev()) {
+            await loadMe().catch(() => {});
+          }
           setReady(true);
         } else {
           setReady(true);
@@ -87,6 +168,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setAuthError((e as Error).message);
         setReady(true);
       });
+
     return () => unsub();
   }, [loadMe]);
 
@@ -96,25 +178,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       me,
       ready,
       authError,
-      async signInGoogle() {
-        const fa = await import("firebase/auth");
-        await fa.signInWithPopup(authRef.current!, new fa.GoogleAuthProvider());
-        return loadMe();
+      recovery,
+      async signInGoogle(role, next) {
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+        const origin = window.location.origin;
+        const params = new URLSearchParams();
+        if (role) params.set("as", role);
+        if (next) params.set("next", next);
+        const query = params.toString();
+        const redirectTo = `${origin}/signin${query ? `?${query}` : ""}`;
+
+        const { error } = await client.auth.signInWithOAuth({
+          provider: "google",
+          options: { redirectTo },
+        });
+        if (error) throw error;
+        return null;
       },
       async signInEmail(email, password, create, name) {
-        const fa = await import("firebase/auth");
-        const auth = authRef.current;
-        if (!auth) throw new Error("Sign-in is still loading. Try again in a moment.");
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+
         if (create) {
-          const cred = await fa.createUserWithEmailAndPassword(auth, email, password);
-          if (name) {
-            await fa.updateProfile(cred.user, { displayName: name });
-            await cred.user.getIdToken(true);
+          const { data, error } = await client.auth.signUp({
+            email,
+            password,
+            options: {
+              data: { full_name: name || "" },
+            },
+          });
+          if (error) throw error;
+          if (!data.session) {
+            // Confirmation required
+            return null;
           }
-        } else {
-          await fa.signInWithEmailAndPassword(auth, email, password);
+          tokenRef.current = data.session.access_token;
+          return loadMe();
         }
-        // Firebase accepted the password; now make sure our server accepts the token too.
+
+        const { data, error } = await client.auth.signInWithPassword({
+          email,
+          password,
+        });
+        if (error) throw error;
+        tokenRef.current = data.session.access_token;
         return loadMe();
       },
       async signInDemo(role) {
@@ -128,20 +236,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return loadMe();
       },
       async signOut() {
-        if (authRef.current) {
-          const fa = await import("firebase/auth");
-          await fa.signOut(authRef.current);
+        if (supabaseRef.current) {
+          try {
+            await supabaseRef.current.auth.signOut();
+          } catch {
+            /* ignore */
+          }
         }
         try {
           localStorage.removeItem(DEV_KEY);
         } catch {
           /* ignore */
         }
+        tokenRef.current = null;
+        lastLoadedUidRef.current = null;
         setMe(null);
         setAuthError("");
+        setRecovery(false);
+      },
+      async sendPasswordReset(email) {
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+        const { error } = await client.auth.resetPasswordForEmail(email, {
+          redirectTo: `${window.location.origin}/signin?reset=1`,
+        });
+        if (error) throw error;
+      },
+      async setNewPassword(password) {
+        const client = supabaseRef.current;
+        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
+        const { error } = await client.auth.updateUser({ password });
+        if (error) throw error;
+        setRecovery(false);
       },
     }),
-    [config, me, ready, authError, loadMe],
+    [config, me, ready, authError, recovery, loadMe],
   );
 
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
@@ -155,19 +284,43 @@ export function useAuth() {
 
 export function friendlyAuthError(err: unknown): string {
   const code = (err as { code?: string })?.code ?? "";
-  const map: Record<string, string> = {
-    "auth/invalid-credential": "Email or password is wrong.",
-    "auth/wrong-password": "Email or password is wrong.",
-    "auth/user-not-found": "No account with that email. Create one instead.",
-    "auth/email-already-in-use": "An account with that email exists. Sign in instead.",
-    "auth/weak-password": "Use at least 6 characters for the password.",
-    "auth/invalid-email": "That email address doesn't look right.",
-    "auth/too-many-requests": "Too many attempts. Wait a minute and try again.",
-    "auth/network-request-failed": "Couldn't reach Firebase. Check your internet connection.",
-    "auth/popup-closed-by-user": "The Google window was closed before signing in.",
-    "auth/unauthorized-domain": "This domain isn't allowed yet. Add it under Firebase → Authentication → Settings → Authorized domains.",
-    "auth/operation-not-allowed": "This sign-in method is off. Enable it in Firebase → Authentication → Sign-in method.",
-    "auth/invalid-api-key": "The Firebase API key on the server is wrong. Check FIREBASE_API_KEY.",
+  const msg = ((err as Error)?.message || "").toLowerCase();
+
+  const codeMap: Record<string, string> = {
+    invalid_credentials: "Email or password is wrong.",
+    user_already_exists: "An account with that email exists. Sign in instead.",
+    weak_password: "Use at least 6 characters for the password.",
+    validation_failed: "That email address doesn't look right.",
+    invalid_email: "That email address doesn't look right.",
+    email_not_confirmed: "Confirm your email first, then sign in.",
+    over_request_rate_limit: "Too many attempts. Wait a minute and try again.",
+    over_email_send_rate_limit: "Too many attempts. Wait a minute and try again.",
+    network_error: "Couldn't reach the sign-in service. Check your internet connection.",
+    provider_disabled: "This sign-in method is off in Supabase.",
   };
-  return map[code] ?? (err as Error)?.message ?? "Sign-in failed.";
+
+  if (code && codeMap[code]) {
+    return codeMap[code];
+  }
+
+  if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
+    return "Email or password is wrong.";
+  }
+  if (msg.includes("already registered") || msg.includes("user already exists")) {
+    return "An account with that email exists. Sign in instead.";
+  }
+  if (msg.includes("email not confirmed") || msg.includes("confirm your email")) {
+    return "Confirm your email first, then sign in.";
+  }
+  if (msg.includes("password should be at least") || msg.includes("weak password")) {
+    return "Use at least 6 characters for the password.";
+  }
+  if (msg.includes("rate limit") || msg.includes("too many requests")) {
+    return "Too many attempts. Wait a minute and try again.";
+  }
+  if (msg.includes("failed to fetch") || msg.includes("network") || msg.includes("unreachable")) {
+    return "Couldn't reach the sign-in service. Check your internet connection.";
+  }
+
+  return (err as Error)?.message ?? "Sign-in failed.";
 }
