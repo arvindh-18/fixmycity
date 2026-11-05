@@ -56,6 +56,11 @@ def _staff_list(db: Session) -> list[dict]:
         rows.setdefault(e, {"email": e, "role": "worker", "source": "env", "added_by": ""})
     for e in sorted(settings.admin_emails):  # ADMIN_EMAILS always wins
         rows[e] = {"email": e, "role": "admin", "source": "env", "added_by": ""}
+    jobs = dict(db.execute(select(Issue.assigned_to_email, func.count(Issue.id))
+                           .where(Issue.status.in_(("open", "in_progress")), Issue.assigned_to_email.is_not(None))
+                           .group_by(Issue.assigned_to_email)).all())
+    for r in rows.values():
+        r["open_jobs"] = jobs.get(r["email"], 0)
     return list(rows.values())
 
 
@@ -153,10 +158,14 @@ def stats(pincode: str = "", locality: str = "", db: Session = Depends(get_db),
     by_area: dict[tuple[str, str], int] = {}
     week_ago = now() - timedelta(days=7)
     this_week = 0
+    fixed_this_week = 0
     for i in issues:
         counts[i.status] = counts.get(i.status, 0) + 1
         created = i.created_at if i.created_at.tzinfo else i.created_at.replace(tzinfo=week_ago.tzinfo)
         this_week += created >= week_ago
+        if i.resolved_at:
+            resolved = i.resolved_at if i.resolved_at.tzinfo else i.resolved_at.replace(tzinfo=week_ago.tzinfo)
+            fixed_this_week += i.status == "resolved" and resolved >= week_ago
         if i.status in ("open", "in_progress"):
             by_cat[i.category] = by_cat.get(i.category, 0) + 1
             key = (i.locality or "Unknown area", i.pincode)
@@ -171,6 +180,7 @@ def stats(pincode: str = "", locality: str = "", db: Session = Depends(get_db),
         "resolved_pct": round(100 * counts["resolved"] / decided) if decided else 0,
         "avg_days_to_fix": resolution_days(issues),
         "this_week": this_week,
+        "fixed_this_week": fixed_this_week,
         "by_category": sorted(
             ({"category": c, "label": CATEGORIES.get(c, c), "count": n} for c, n in by_cat.items()),
             key=lambda r: -r["count"],

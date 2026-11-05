@@ -60,8 +60,14 @@ def test_worker_can_mark_fixed_but_not_close_or_delete():
     iid = report().json()["id"]
     assert client.post(f"/api/issues/{iid}/status", json={"status": "rejected"}, headers=WORKER).status_code == 403
     assert client.delete(f"/api/issues/{iid}", headers=WORKER).status_code == 403
-    r = client.post(f"/api/issues/{iid}/status", json={"status": "resolved", "note": "Filled"}, headers=WORKER)
-    assert r.status_code == 200 and r.json()["status"] == "resolved"
+    # Workers must prove the fix with an after photo.
+    assert client.post(f"/api/issues/{iid}/status", json={"status": "resolved"}, headers=WORKER).status_code == 422
+    assert client.post(f"/api/issues/{iid}/status", json={"status": "in_progress"}, headers=WORKER).status_code == 200
+    r = client.post(f"/api/issues/{iid}/fix", data={"note": "Filled"}, files={"photo": ("a.jpg", jpeg(), "image/jpeg")},
+                    headers=WORKER)
+    assert r.status_code == 200 and r.json()["status"] == "resolved" and r.json()["after_photo_url"]
+    assert client.get(r.json()["after_photo_url"]).status_code == 200
+    assert client.post(f"/api/issues/{iid}/fix", files={"photo": ("a.jpg", jpeg(), "image/jpeg")}).status_code == 401
 
 
 def test_admin_promotes_resident_to_worker():
@@ -214,3 +220,23 @@ def test_duplicate_score_prefers_close_and_similar():
     from app import duplicates as d
     assert d.jaccard("Deep pothole near bus stop", "pothole at the bus stop") > 0.5
     assert d.jaccard("streetlight off", "garbage pile") == 0
+
+
+def test_admin_assigns_job_and_worker_sees_it():
+    iid = report().json()["id"]
+    assert client.post(f"/api/issues/{iid}/assign", json={"email": "ravi@demo.local"}, headers=WORKER).status_code == 403
+    assert client.post(f"/api/issues/{iid}/assign", json={"email": "meera@demo.local"}, headers=ADMIN).status_code == 422
+    client.post("/api/staff", json={"email": "ravi@demo.local"}, headers=ADMIN)
+    r = client.post(f"/api/issues/{iid}/assign", json={"email": "ravi@demo.local"}, headers=ADMIN)
+    assert r.status_code == 200 and r.json()["assigned_to_email"] == "ravi@demo.local"
+    assert "Assigned to ravi@demo.local." in [u["note"] for u in r.json()["updates"]]
+    staff = client.get("/api/staff", headers=ADMIN).json()
+    assert next(m for m in staff if m["email"] == "ravi@demo.local")["open_jobs"] == 1
+    jobs = client.get("/api/issues", params={"worker": "me", "status": "active"}, headers=WORKER).json()
+    assert [j["id"] for j in jobs] == [iid]
+    assert client.get("/api/issues", params={"worker": "me"}, headers=CITIZEN).status_code == 403
+    assert client.get("/api/issues", params={"unassigned": True}).json() == []
+    client.post(f"/api/issues/{iid}/fix", files={"photo": ("a.jpg", jpeg(), "image/jpeg")}, headers=WORKER)
+    done = client.get("/api/issues", params={"worker": "me", "status": "resolved", "sort": "fixed"}, headers=WORKER).json()
+    assert [j["id"] for j in done] == [iid]
+    assert client.get("/api/stats").json()["fixed_this_week"] == 1
