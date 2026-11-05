@@ -136,6 +136,20 @@ class MessageRead(Base):
     last_read_message_id: Mapped[int] = mapped_column(Integer, default=0)
 
 
+class DuplicateFlag(Base):
+    """A new report that looks like an existing one; an admin merges or dismisses it."""
+    __tablename__ = "duplicate_flags"
+    __table_args__ = (UniqueConstraint("issue_id", "candidate_id"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    issue_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), index=True)  # the newer report
+    candidate_id: Mapped[int] = mapped_column(ForeignKey("issues.id", ondelete="CASCADE"), index=True)  # existing one
+    score: Mapped[float] = mapped_column(Float)
+    distance_m: Mapped[float] = mapped_column(Float)
+    status: Mapped[str] = mapped_column(String(16), default="pending", index=True)  # pending | merged | dismissed
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
 ROLES = ("public", "worker", "admin")
 
 

@@ -6,6 +6,7 @@ import { Layout } from "./components/Layout";
 import { Spinner, ToastProvider } from "./components/ui";
 import { AuthProvider, homeFor, useAuth } from "./lib/auth";
 import type { Role } from "./lib/types";
+import AdminDuplicates from "./pages/AdminDuplicates";
 import AdminHome from "./pages/AdminHome";
 import Browse from "./pages/Browse";
 import Home from "./pages/Home";
@@ -42,6 +43,7 @@ createRoot(document.getElementById("root")!).render(
               <Route path="signin" element={<SignIn />} />
               <Route path="report" element={<RequireAuth><Report /></RequireAuth>} />
               <Route path="admin" element={<RequireAuth roles={["admin"]}><AdminHome /></RequireAuth>} />
+              <Route path="admin/duplicates" element={<RequireAuth roles={["admin"]}><AdminDuplicates /></RequireAuth>} />
               <Route path="worker" element={<RequireAuth roles={["worker"]}><WorkerHome /></RequireAuth>} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>

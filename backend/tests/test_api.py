@@ -176,3 +176,41 @@ def test_ai_structure_validates_and_keeps_original_text(monkeypatch):
     assert client.post("/api/ai/structure", json={"text": text}).status_code == 401
     issue = report(original_text=text).json()
     assert issue["original_text"] == text
+
+
+def test_close_similar_report_is_flagged_and_admin_merges():
+    a = report(title="Deep pothole outside bus stop").json()
+    client.post(f"/api/issues/{a['id']}/upvote", headers=OTHER)
+    b = report(headers=OTHER, title="Big pothole at the bus stop", lat=12.97005, lng=77.64002).json()
+    assert b["likely_duplicate_of"] == [a["id"]]
+    flags = client.get("/api/admin/duplicates", headers=ADMIN).json()
+    assert len(flags) == 1 and flags[0]["candidate"]["id"] == a["id"] and flags[0]["distance_m"] < 10
+    assert client.get("/api/admin/duplicates", headers=WORKER).status_code == 403
+    fid = flags[0]["id"]
+    assert client.post(f"/api/admin/duplicates/{fid}/merge", json={"keep_id": 999}, headers=ADMIN).status_code == 422
+    client.post(f"/api/issues/{a['id']}/messages", json={"body": "on it"}, headers=WORKER)
+    client.post(f"/api/issues/{b['id']}/messages", json={"body": "same here"}, headers=OTHER)
+    r = client.post(f"/api/admin/duplicates/{fid}/merge", json={"keep_id": a["id"]}, headers=ADMIN)
+    assert r.status_code == 200, r.text
+    kept = client.get(f"/api/issues/{a['id']}").json()
+    gone = client.get(f"/api/issues/{b['id']}").json()
+    # OTHER already +1'd the kept report and also reported the duplicate: still counted once.
+    assert kept["upvotes"] == 1
+    assert gone["status"] == "rejected" and gone["merged_into"] == a["id"]
+    assert any("Merged" in u["note"] for u in kept["updates"]) and any("Merged" in u["note"] for u in gone["updates"])
+    assert len(client.get(f"/api/issues/{a['id']}/messages", headers=ADMIN).json()) == 2
+    assert client.get("/api/admin/duplicates", headers=ADMIN).json() == []
+    assert client.post(f"/api/admin/duplicates/{fid}/dismiss", headers=ADMIN).status_code == 409
+
+
+def test_far_or_different_category_is_not_flagged():
+    report(title="Deep pothole outside bus stop")
+    assert report(title="Deep pothole outside bus stop", lat=12.9720).json()["likely_duplicate_of"] == []  # ~220 m
+    assert report(title="Deep pothole outside bus stop", category="garbage").json()["likely_duplicate_of"] == []
+    assert client.get("/api/admin/duplicates", headers=ADMIN).json() == []
+
+
+def test_duplicate_score_prefers_close_and_similar():
+    from app import duplicates as d
+    assert d.jaccard("Deep pothole near bus stop", "pothole at the bus stop") > 0.5
+    assert d.jaccard("streetlight off", "garbage pile") == 0
