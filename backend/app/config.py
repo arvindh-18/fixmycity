@@ -58,7 +58,11 @@ class Settings:
 
     @property
     def supabase_enabled(self) -> bool:
-        return bool(self.supabase_url and self.supabase_anon_key)
+        return bool(
+            self.supabase_url
+            and self.supabase_anon_key
+            and not self.supabase_anon_key.startswith("your-")
+        )
 
     @property
     def dev_auth(self) -> bool:

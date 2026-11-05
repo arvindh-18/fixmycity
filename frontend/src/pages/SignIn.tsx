@@ -71,7 +71,6 @@ export default function SignIn() {
     signInGoogle,
     signInEmail,
     signInPhone,
-    verifyPhoneOtp,
     signInDemo,
     signOut,
     sendPasswordReset,
@@ -88,8 +87,6 @@ export default function SignIn() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [phone, setPhone] = useState("");
-  const [otp, setOtp] = useState("");
-  const [otpSent, setOtpSent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [infoNote, setInfoNote] = useState("");
@@ -105,8 +102,9 @@ export default function SignIn() {
   useEffect(() => {
     setError("");
     setInfoNote("");
-    setOtpSent(false);
-    setOtp("");
+    if (role !== "public" && mode === "phone") {
+      setMode("signin");
+    }
   }, [mode, role]);
 
   // Handle post-redirect / auto-navigation (with role verification for ?as= across redirects)
@@ -187,44 +185,18 @@ export default function SignIn() {
     }
   }
 
-  function formatPhone(raw: string): string {
-    const digits = raw.replace(/[^0-9]/g, "");
-    if (digits.length === 12 && digits.startsWith("91")) {
-      return `+${digits}`;
-    }
-    if (digits.length === 10) {
-      return `+91${digits}`;
-    }
-    return digits.startsWith("+") ? digits : `+${digits}`;
-  }
-
-  async function handleSendOtp(e: React.FormEvent) {
+  async function handlePhoneSignIn(e: React.FormEvent) {
     e.preventDefault();
-    const formatted = formatPhone(phone);
-    if (!phone.trim() || formatted.length < 12) {
-      setError("Please enter a valid 10-digit mobile number.");
+    const clean = phone.replace(/[^0-9]/g, "");
+    if (clean.length < 10) {
+      setError("Please enter a valid 10-digit phone number.");
       return;
     }
-    setBusy(true);
-    setError("");
-    setInfoNote("");
-    try {
-      await signInPhone(formatted);
-      setOtpSent(true);
-      setInfoNote(`We sent an OTP to ${formatted}.`);
-    } catch (e) {
-      setError(friendlyAuthError(e));
-    } finally {
-      setBusy(false);
+    if (!password) {
+      setError("Please enter your password.");
+      return;
     }
-  }
-
-  async function handleVerifyOtp(e: React.FormEvent) {
-    e.preventDefault();
-    const formatted = formatPhone(phone);
-    const trimmedOtp = otp.trim();
-    if (!formatted || !trimmedOtp) return;
-    await run(() => verifyPhoneOtp(formatted, trimmedOtp));
+    await run(() => signInPhone(clean, password));
   }
 
   const shownError = error || (ready && !me ? authError : "");
@@ -341,68 +313,69 @@ export default function SignIn() {
         </div>
       ) : mode === "phone" ? (
         <div className="mt-8">
-          {!otpSent ? (
-            <form className="space-y-4" onSubmit={handleSendOtp}>
-              <div>
-                <label className="label" htmlFor="phone">
-                  Phone number
-                </label>
-                <div className="flex items-center rounded-xl border border-line bg-white transition-colors focus-within:border-ink">
-                  <span className="flex items-center border-r border-line py-3 pl-3.5 pr-2.5 text-sm font-semibold text-ink-2 select-none">
-                    +91
-                  </span>
-                  <input
-                    id="phone"
-                    type="tel"
-                    className="w-full bg-transparent px-3 py-3 text-base text-ink outline-none placeholder:text-ink-3"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ""))}
-                    required
-                    maxLength={10}
-                    placeholder="98765 43210"
-                    autoComplete="tel-national"
-                  />
-                </div>
-                <p className="mt-1 text-xs text-ink-3">Enter your 10-digit Indian mobile number.</p>
-              </div>
-              <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
-                {busy && <Spinner size={16} />} Send OTP
-              </button>
-            </form>
-          ) : (
-            <form className="space-y-4" onSubmit={handleVerifyOtp}>
-              <div>
-                <label className="label" htmlFor="otp">
-                  Enter OTP
-                </label>
+          <form className="space-y-4" onSubmit={handlePhoneSignIn}>
+            <div>
+              <label className="label" htmlFor="phone">
+                Phone number
+              </label>
+              <div className="flex items-center rounded-xl border border-line bg-white transition-colors focus-within:border-ink">
+                <span className="flex items-center border-r border-line py-3 pl-3.5 pr-2.5 text-sm font-semibold text-ink-2 select-none">
+                  +91
+                </span>
                 <input
-                  id="otp"
-                  type="text"
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  className="field"
-                  value={otp}
-                  onChange={(e) => setOtp(e.target.value)}
+                  id="phone"
+                  type="tel"
+                  className="w-full bg-transparent px-3 py-3 text-base text-ink outline-none placeholder:text-ink-3"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value.replace(/[^0-9]/g, ""))}
                   required
-                  maxLength={6}
-                  autoComplete="one-time-code"
-                  placeholder="6-digit code"
+                  maxLength={10}
+                  placeholder="98765 43210"
+                  autoComplete="tel-national"
                 />
               </div>
-              <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
-                {busy && <Spinner size={16} />} Verify & sign in
-              </button>
-              <button
-                type="button"
-                className="w-full text-center text-sm font-semibold text-civic hover:underline"
-                onClick={() => { setOtpSent(false); setOtp(""); }}
-              >
-                Use a different number
-              </button>
-            </form>
-          )}
+              <p className="mt-1 text-xs text-ink-3">Enter 10-digit mobile number.</p>
+            </div>
+            <div>
+              <label className="label" htmlFor="phone-pw">
+                Password
+              </label>
+              <input
+                id="phone-pw"
+                type="password"
+                className="field"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                autoComplete="current-password"
+                placeholder="Enter password"
+              />
+            </div>
+            <button type="submit" className="btn-ink h-12 w-full" disabled={busy}>
+              {busy && <Spinner size={16} />} Sign in with phone
+            </button>
+          </form>
+
+          {/* Sample phone credentials display */}
+          <div className="mt-6 rounded-xl border border-line bg-chalk px-4 py-3">
+            <p className="mb-1 text-xs font-semibold text-ink-2">Sample phone login</p>
+            <p className="font-mono text-sm text-ink">
+              Phone: +91 9876543210
+            </p>
+            <p className="font-mono text-sm text-ink">
+              Password: 123456
+            </p>
+          </div>
+
           <p className="mt-5 text-center text-sm text-ink-2">
-            <button className="font-semibold text-civic hover:underline" onClick={() => setMode("signin")}>
+            <button
+              className="font-semibold text-civic hover:underline"
+              onClick={() => {
+                setMode("signin");
+                setPassword("");
+                setError("");
+              }}
+            >
               Sign in with email instead
             </button>
           </p>
@@ -491,14 +464,20 @@ export default function SignIn() {
             </button>
           </form>
 
-          {/* Phone OTP link */}
-          <button
-            type="button"
-            className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:bg-chalk"
-            onClick={() => setMode("phone")}
-          >
-            <Phone size={16} /> Sign in with phone OTP
-          </button>
+          {/* Phone login link — Resident role only */}
+          {role === "public" && (
+            <button
+              type="button"
+              className="mt-4 flex h-12 w-full items-center justify-center gap-2 rounded-xl border border-line bg-white text-sm font-semibold text-ink transition-colors hover:bg-chalk"
+              onClick={() => {
+                setMode("phone");
+                setPassword("");
+                setError("");
+              }}
+            >
+              <Phone size={16} /> Sign in with phone number
+            </button>
+          )}
 
           {/* Create account / sign in toggle — hidden for admin role (admins are pre-created) */}
           {role !== "admin" && (

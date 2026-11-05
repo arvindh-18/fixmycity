@@ -12,6 +12,12 @@ import type { SupabaseClient } from "@supabase/supabase-js";
 import { api, loadConfig, setTokenGetter } from "./api";
 import type { AppConfig, Me, Role } from "./types";
 
+export const SAMPLE_PHONE_ACCOUNTS: Record<string, { password: string; name: string }> = {
+  "9876543210": { password: "123456", name: "Demo Resident" },
+  "9876543211": { password: "123456", name: "Ravi (Resident)" },
+  "9123456780": { password: "123456", name: "Priya (Resident)" },
+};
+
 interface AuthState {
   config: AppConfig | null;
   me: Me | null;
@@ -20,8 +26,7 @@ interface AuthState {
   recovery: boolean;
   signInGoogle: (role?: Role, next?: string) => Promise<Me | null>;
   signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me | null>;
-  signInPhone: (phone: string) => Promise<void>;
-  verifyPhoneOtp: (phone: string, otp: string) => Promise<Me | null>;
+  signInPhone: (phone: string, password: string) => Promise<Me | null>;
   signInDemo: (role: Role) => Promise<Me>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
@@ -227,23 +232,51 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         tokenRef.current = data.session.access_token;
         return loadMe();
       },
-      async signInPhone(phone) {
+      async signInPhone(phone, password) {
+        const digits = phone.replace(/[^0-9]/g, "");
+        const national = digits.length === 12 && digits.startsWith("91") ? digits.slice(2) : digits;
+        const account = SAMPLE_PHONE_ACCOUNTS[national];
+
+        if (!account || account.password !== password.trim()) {
+          throw new Error("Invalid phone number or password. Try 9876543210 with password 123456.");
+        }
+
+        // 1. If in Supabase mode, attempt auth with phone email alias
         const client = supabaseRef.current;
-        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
-        const { error } = await client.auth.signInWithOtp({ phone });
-        if (error) throw error;
-      },
-      async verifyPhoneOtp(phone, otp) {
-        const client = supabaseRef.current;
-        if (!client) throw new Error("Sign-in service is not ready. Please try again.");
-        const { data, error } = await client.auth.verifyOtp({
-          phone,
-          token: otp,
-          type: "sms",
-        });
-        if (error) throw error;
-        if (!data.session) return null;
-        tokenRef.current = data.session.access_token;
+        if (client) {
+          const email = `phone_${national}@fixmycity.demo`;
+          try {
+            const { data, error } = await client.auth.signInWithPassword({
+              email,
+              password: account.password,
+            });
+            if (!error && data.session) {
+              tokenRef.current = data.session.access_token;
+              return loadMe();
+            }
+            const su = await client.auth.signUp({
+              email,
+              password: account.password,
+              options: { data: { full_name: account.name } },
+            });
+            if (su.data?.session) {
+              tokenRef.current = su.data.session.access_token;
+              return loadMe();
+            }
+          } catch {
+            // Ignore Supabase error and fall back to local token
+          }
+        }
+
+        // 2. Local demo token without external services
+        const token = `dev:phone-${national}:${account.name}:0`;
+        try {
+          localStorage.setItem(DEV_KEY, token);
+        } catch {
+          /* private mode */
+        }
+        tokenRef.current = token;
+        setTokenGetter(async () => readDev() ?? token);
         return loadMe();
       },
       async signInDemo(role) {
