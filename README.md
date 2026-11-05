@@ -24,7 +24,7 @@ OpenStreetMap map, and everyone can follow it — by **pincode or locality** —
     close/reopen/delete.
 - **Insights + proof of work**: open / fixed / average days to fix, a "reported vs fixed, last 8 weeks" chart,
   recent before/after photos, open problems by type, worst areas.
-- **Sign-in**: Firebase Authentication (Google + email/password).
+- **Sign-in**: Supabase Authentication (Google + email/password).
 
 **Stack**: React + Vite + Tailwind + Leaflet (OpenStreetMap tiles) + Motion · FastAPI + SQLAlchemy ·
 SQLite locally, any Postgres in the cloud · Gemini REST API · Nominatim for geocoding.
@@ -36,7 +36,7 @@ backend/
     main.py        FastAPI app, serves the built frontend too
     config.py      every setting, from env vars
     db.py          tables (created on startup; new columns are added automatically)
-    auth.py        Firebase ID-token check (only needs the project ID) + public/worker/admin roles
+    auth.py        Supabase access token check + public/worker/admin roles
     gemini.py      photo → draft report, voice → text, free text (en/ta/hi) → structured report
     duplicates.py  duplicate scoring + merge
     geocode.py     pin → locality + pincode (OpenStreetMap Nominatim)
@@ -75,7 +75,7 @@ and the AI buttons hidden. Add keys to `.env` (copy `.env.example`, root or `bac
 
 | To enable | Set |
 |---|---|
-| Real sign-in | `FIREBASE_PROJECT_ID`, `FIREBASE_API_KEY`, `FIREBASE_APP_ID` |
+| Real sign-in | `SUPABASE_URL`, `SUPABASE_ANON_KEY` |
 | City staff | `ADMIN_EMAILS=you@gmail.com,teammate@gmail.com` |
 | Photo auto-fill + voice fallback | `GEMINI_API_KEY` |
 | Another city | `CITY_NAME`, `CITY_LAT`, `CITY_LNG`, `COUNTRY_CODES` |
@@ -87,24 +87,26 @@ Tests: `cd backend && pytest -q`
 
 ---
 
-## Set up Firebase (5 minutes)
+## Set up Supabase (5 minutes)
 
-1. [console.firebase.google.com](https://console.firebase.google.com) → **Add project** (Analytics not needed).
-2. **Build → Authentication → Get started** → enable **Google** and **Email/Password**.
-3. **Project settings → General → Your apps → Web (`</>`)** → register an app → copy `apiKey`, `projectId`,
-   `appId` into `FIREBASE_API_KEY`, `FIREBASE_PROJECT_ID`, `FIREBASE_APP_ID`.
-4. After deploying: **Authentication → Settings → Authorized domains** → add your app's domain
-   (e.g. `fixmycity.onrender.com`). `localhost` is already there.
+1. [supabase.com](https://supabase.com) → **New project**.
+2. **Authentication → Providers**:
+   - Enable **Email** with **Confirm email** ON.
+   - Enable **Google** (client ID and secret from Google Cloud; add `https://<project-ref>.supabase.co/auth/v1/callback` as redirect URI).
+3. **Authentication → URL Configuration**:
+   - Set **Site URL** to your app's URL.
+   - Add redirect URLs: `http://localhost:5173/**` and `https://<your-render-domain>/**`.
+4. **Project Settings → API Keys** → copy the Project URL and the anon/publishable key into `SUPABASE_URL` and `SUPABASE_ANON_KEY`.
 
-No service-account file is needed — the backend checks tokens against Google's public keys.
+No service-role secret is needed — the backend checks access tokens against Supabase's public JWKS.
 
 **Roles.** Put city admins' emails in `ADMIN_EMAILS` (comma-separated). Field workers can go in `WORKER_EMAILS`,
-or an admin adds them from **Admin → Team**. Each person then creates a normal Firebase account with that email
-and signs in on the matching tab. Without Firebase (local dev) the sign-in page offers one-click demo accounts for
+or an admin adds them from **Admin → Team**. Each person then creates a normal account with that email
+and signs in on the matching tab. Without Supabase (local dev) the sign-in page offers one-click demo accounts for
 all three roles.
 
-**Sign-in does nothing / shows "could not be verified"?** Check that `FIREBASE_PROJECT_ID` matches the project
-your web app config comes from, and that the server's clock is roughly right (60 s of drift is tolerated).
+**Sign-in does nothing / shows "could not be verified"?** Check that `SUPABASE_URL` and `SUPABASE_ANON_KEY` match your
+project, and that the server's clock is roughly right (60 s of drift is tolerated).
 
 ## Get a Gemini key (1 minute)
 
@@ -123,28 +125,28 @@ no CORS, and nothing to configure on the frontend.
 1. Push this repo to GitHub.
 2. Render → **New → Blueprint** → pick the repo. `render.yaml` creates the web service **and** a free Postgres
    database, and connects them.
-3. Fill in the Firebase, `ADMIN_EMAILS` and `GEMINI_API_KEY` values it asks for → **Apply**.
-4. Add the `*.onrender.com` domain to Firebase's authorized domains.
+3. Fill in the Supabase, `ADMIN_EMAILS` and `GEMINI_API_KEY` values it asks for → **Apply**.
+4. Add the `*.onrender.com` domain to Supabase's redirect URLs and authorized domains.
 5. Optional sample data: Render → your service → **Shell** → `python seed.py`.
 
-### Option B — Google Cloud Run (same Google project as Firebase)
+### Option B — Google Cloud Run
 
 Cloud Run's disk is wiped on restart, so point `DATABASE_URL` at a hosted Postgres
 (free: [Neon](https://neon.tech) or [Supabase](https://supabase.com) → copy the connection string).
 
 ```bash
 gcloud run deploy fixmycity --source . --region asia-south1 --allow-unauthenticated \
-  --set-env-vars "ENVIRONMENT=production,DATABASE_URL=postgresql://...,FIREBASE_PROJECT_ID=...,FIREBASE_API_KEY=...,FIREBASE_APP_ID=...,ADMIN_EMAILS=you@gmail.com,GEMINI_API_KEY=..."
+  --set-env-vars "ENVIRONMENT=production,DATABASE_URL=postgresql://...,SUPABASE_URL=https://...,SUPABASE_ANON_KEY=...,ADMIN_EMAILS=you@gmail.com,GEMINI_API_KEY=..."
 ```
 
-Then add the `*.run.app` domain to Firebase's authorized domains.
+Then add the `*.run.app` domain to Supabase's redirect URLs.
 
 ### Anywhere else
 
 `docker build -t fixmycity . && docker run -p 8000:8000 --env-file .env fixmycity` — Railway, Fly.io and
 Koyeb all run the same image.
 
-> With `ENVIRONMENT=production`, demo sign-in is switched off: Firebase must be configured.
+> With `ENVIRONMENT=production`, demo sign-in is switched off: Supabase must be configured.
 
 ---
 
@@ -154,7 +156,7 @@ Interactive docs at `/docs`.
 
 | Method | Path | |
 |---|---|---|
-| GET | `/api/config` | Firebase web config, city, categories, whether AI is on |
+| GET | `/api/config` | Supabase web config, city, categories, whether AI is on |
 | GET | `/api/issues?pincode=&locality=&status=active&category=&sort=new\|top\|fixed&mine=1&worker=me&unassigned=1` | list / filter |
 | POST | `/api/issues` (multipart) | create; locality + pincode filled from the pin if blank |
 | GET | `/api/issues/{id}` · `/api/issues/{id}/photo` | detail · image |

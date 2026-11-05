@@ -319,14 +319,14 @@ def test_6_legacy_uid_mapping():
     then sign in with matching verified email -> /api/me returns old uid and /api/issues?mine=1 includes it.
     Without mapping Supabase sub is used. With unverified email mapping is NOT applied."""
     with SessionLocal() as db:
-        db.add(LegacyUid(email="legacy@example.com", uid="firebase-old-123"))
+        db.add(LegacyUid(email="legacy@example.com", uid="legacy-old-123"))
         db.add(
             Issue(
                 title="Pothole in T. Nagar",
                 category="pothole",
                 lat=13.08,
                 lng=80.27,
-                reporter_uid="firebase-old-123",
+                reporter_uid="legacy-old-123",
                 reporter_name="Legacy User",
             )
         )
@@ -341,7 +341,7 @@ def test_6_legacy_uid_mapping():
     auth._token_cache.clear()
     resp = client.get("/api/me", headers={"Authorization": f"Bearer {token_verified}"})
     assert resp.status_code == 200
-    assert resp.json()["uid"] == "firebase-old-123"
+    assert resp.json()["uid"] == "legacy-old-123"
 
     mine_resp = client.get("/api/issues?mine=1", headers={"Authorization": f"Bearer {token_verified}"})
     assert mine_resp.status_code == 200

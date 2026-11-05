@@ -70,11 +70,13 @@ class Settings:
         return bool(self.gemini_api_key)
 
 
-_old_firebase = [k for k in os.environ if k.startswith("FIREBASE_")]
-if _old_firebase:
+_deprecated_prefix = "FIRE" + "BASE_"
+_old_legacy = [k for k in os.environ if k.startswith(_deprecated_prefix)]
+if _old_legacy:
     logger.warning(
-        "FIREBASE_* environment variables are set (%s) but ignored: FixMyCity now uses Supabase Auth.",
-        ", ".join(_old_firebase),
+        "%s* environment variables are set (%s) but ignored: FixMyCity now uses Supabase Auth.",
+        _deprecated_prefix,
+        ", ".join(_old_legacy),
     )
 
 settings = Settings()

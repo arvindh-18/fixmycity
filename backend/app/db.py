@@ -164,7 +164,7 @@ class StaffMember(Base):
 
 
 class LegacyUid(Base):
-    """Old Firebase uid per email, so returning users keep their reports, upvotes and chats."""
+    """Legacy auth uid per email, so returning users keep their reports, upvotes and chats."""
     __tablename__ = "legacy_uids"
     email: Mapped[str] = mapped_column(String(254), primary_key=True)
     uid: Mapped[str] = mapped_column(String(128))

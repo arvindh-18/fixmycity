@@ -9,7 +9,7 @@ You are working on **FixMyCity**, a civic-issue reporting app. Residents report 
 ## The codebase (read these first)
 
 - **Backend:** FastAPI + SQLAlchemy 2 in `backend/app/`. SQLite locally, Postgres in production. Tables are created by `init_db()` (`Base.metadata.create_all`); there are no migrations, so new tables are fine, but **adding columns to existing tables needs a small startup step** (`ALTER TABLE … ADD COLUMN` if missing) that works on both SQLite and Postgres.
-  - `app/auth.py`: Firebase token verification and the **three roles: `public`, `worker`, `admin`**. Use the dependencies `current_user`, `staff_user` (worker or admin) and `admin_user`. Dev tokens are `dev:<uid>:<name>:<0|w|1>`.
+  - `app/auth.py`: Supabase token verification and the **three roles: `public`, `worker`, `admin`**. Use the dependencies `current_user`, `staff_user` (worker or admin) and `admin_user`. Dev tokens are `dev:<uid>:<name>:<0|w|1>`.
   - `app/db.py`: `Issue`, `StatusUpdate`, `Upvote`, `StaffMember`, `CATEGORIES`, `STATUSES`.
   - `app/routes/issues.py`: issue CRUD, `/nearby` (open issues within N metres, with a haversine `_distance_m`), and `/status` (workers may only set `in_progress`/`resolved`).
   - `app/routes/misc.py`: `/config`, `/me`, `/staff` (team management), `/ai/analyze`, `/ai/transcribe`, `/geo/*`, `/stats`.
