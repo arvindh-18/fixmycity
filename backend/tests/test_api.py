@@ -4,8 +4,8 @@ import sys
 from pathlib import Path
 
 os.environ["DATABASE_URL"] = os.environ.get("TEST_DATABASE_URL", "sqlite:///./test.db")
-os.environ["FIREBASE_PROJECT_ID"] = ""
-os.environ["FIREBASE_API_KEY"] = ""
+os.environ["SUPABASE_URL"] = ""
+os.environ["SUPABASE_ANON_KEY"] = ""
 os.environ["GEMINI_API_KEY"] = "test-key"
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 

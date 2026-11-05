@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, text,
+    DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, select, text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
@@ -161,6 +161,22 @@ class StaffMember(Base):
     role: Mapped[str] = mapped_column(String(16), default="worker")
     added_by: Mapped[str] = mapped_column(String(120), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+class LegacyUid(Base):
+    """Old Firebase uid per email, so returning users keep their reports, upvotes and chats."""
+    __tablename__ = "legacy_uids"
+    email: Mapped[str] = mapped_column(String(254), primary_key=True)
+    uid: Mapped[str] = mapped_column(String(128))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
+
+
+def legacy_uid_for_email(email: str) -> str | None:
+    if not email:
+        return None
+    with SessionLocal() as db:
+        row = db.scalar(select(LegacyUid).where(LegacyUid.email == email.lower()))
+        return row.uid if row else None
 
 
 def _add_missing_columns() -> None:

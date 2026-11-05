@@ -1,32 +1,37 @@
-"""Firebase Authentication + roles.
+"""Supabase Authentication + roles.
 
-The frontend signs in with Firebase and sends the ID token as `Authorization: Bearer <token>`.
-We verify it against Google's public certificates, so the backend needs only FIREBASE_PROJECT_ID —
-no service-account file.
+The frontend signs in with Supabase and sends the access token as `Authorization: Bearer <token>`.
+The backend verifies the token using PyJWT (via JWKS for asymmetric algorithms or Supabase Auth server fallback/HS256).
 
 Roles: `public` (residents), `worker` (field servicemen) and `admin` (city staff).
 A user's role comes from ADMIN_EMAILS / WORKER_EMAILS, or from the staff list admins manage in the app.
 
-Without Firebase configured (local dev only) tokens look like `dev:<uid>:<name>:<role>` where role is
+Without Supabase configured (local dev only) tokens look like `dev:<uid>:<name>:<role>` where role is
 `0`/`public`, `w`/`worker` or `1`/`admin`.
 """
+import hashlib
+import logging
 import time
 from dataclasses import dataclass
 
 import httpx
+import jwt
 from fastapi import Depends, Header, HTTPException
-from google.auth import jwt as google_jwt
 from sqlalchemy import select
 
 from .config import settings
-from .db import SessionLocal, StaffMember
+from .db import LegacyUid, SessionLocal, StaffMember, legacy_uid_for_email
 
-CERTS_URL = "https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com"
-_certs: dict = {"keys": {}, "expires": 0.0}
+logger = logging.getLogger("fixmycity.auth")
 
-# A fresh Firebase token is stamped with Google's clock. If this server's clock is even a second behind,
-# google-auth (default skew 0) rejects it as "Token used too early" and sign-in silently fails.
 CLOCK_SKEW_SECONDS = 60
+
+# Cache: sha256(token) -> (expiry_time, User)
+_token_cache: dict[str, tuple[float, "User"]] = {}
+_CACHE_MAX = 2000
+
+_jwks_client: jwt.PyJWKClient | None = None
+_warned_email_verified = False
 
 
 @dataclass
@@ -64,35 +69,147 @@ def role_for_email(email: str) -> str:
     return "public"
 
 
-def _google_certs() -> dict:
-    if time.time() < _certs["expires"] and _certs["keys"]:
-        return _certs["keys"]
-    resp = httpx.get(CERTS_URL, timeout=10)
-    resp.raise_for_status()
-    max_age = 3600
-    for part in resp.headers.get("cache-control", "").split(","):
-        if part.strip().startswith("max-age="):
-            max_age = int(part.split("=")[1])
-    _certs.update(keys=resp.json(), expires=time.time() + max_age)
-    return _certs["keys"]
+def _get_jwks_client() -> jwt.PyJWKClient:
+    global _jwks_client
+    jwks_url = f"{settings.supabase_url}/auth/v1/.well-known/jwks.json"
+    if _jwks_client is None or getattr(_jwks_client, "uri", None) != jwks_url:
+        _jwks_client = jwt.PyJWKClient(jwks_url, cache_jwk_set=True, lifespan=3600)
+    return _jwks_client
 
 
-def _verify_firebase(token: str) -> User:
-    project = settings.firebase_project_id
+def _verify_with_auth_server(token: str) -> dict:
+    url = f"{settings.supabase_url}/auth/v1/user"
+    headers = {
+        "apikey": settings.supabase_anon_key,
+        "Authorization": f"Bearer {token}",
+    }
     try:
-        claims = google_jwt.decode(token, certs=_google_certs(), audience=project,
-                                   clock_skew_in_seconds=CLOCK_SKEW_SECONDS)
-    except Exception as exc:  # expired, wrong project, tampered...
-        raise HTTPException(401, f"Sign-in could not be verified by the server: {exc}")
-    if claims.get("iss") != f"https://securetoken.google.com/{project}" or not claims.get("sub"):
-        raise HTTPException(401, "Token was not issued for this Firebase project. Check FIREBASE_PROJECT_ID.")
-    email = (claims.get("email") or "").lower()
-    return User(
-        uid=claims["sub"],
-        name=claims.get("name") or (email.split("@")[0] if email else "Resident"),
-        email=email,
-        role=role_for_email(email),
+        resp = httpx.get(url, headers=headers, timeout=10)
+    except httpx.HTTPError:
+        raise HTTPException(503, "Sign-in service is unreachable, try again.")
+
+    if resp.status_code == 200:
+        data = resp.json()
+        try:
+            unverified = jwt.decode(token, options={"verify_signature": False})
+        except Exception:
+            unverified = {}
+        return {
+            "sub": data.get("id"),
+            "email": data.get("email"),
+            "role": data.get("role", "authenticated"),
+            "user_metadata": data.get("user_metadata") or {},
+            "email_confirmed_at": data.get("email_confirmed_at"),
+            "exp": unverified.get("exp", time.time() + 60),
+            "_from_auth_server": True,
+        }
+    if resp.status_code in (400, 401, 403, 404):
+        raise HTTPException(401, "Sign-in expired or invalid. Please sign in again.")
+    raise HTTPException(503, "Sign-in service is unreachable, try again.")
+
+
+def _build_user_from_claims(claims: dict) -> User:
+    global _warned_email_verified
+
+    if claims.get("role") != "authenticated":
+        raise HTTPException(401, "Token role is not authenticated.")
+
+    sub = claims.get("sub")
+    if not sub:
+        raise HTTPException(401, "Token is missing sub claim.")
+
+    email = (claims.get("email") or "").strip().lower()
+    user_metadata = claims.get("user_metadata") or {}
+
+    # Email verification gate for staff roles and legacy uids:
+    if claims.get("_from_auth_server"):
+        email_verified = bool(claims.get("email_confirmed_at"))
+    else:
+        if "email_verified" in user_metadata:
+            email_verified = bool(user_metadata["email_verified"])
+        else:
+            if not _warned_email_verified:
+                _warned_email_verified = True
+                logger.warning(
+                    "email_verified claim absent in JWT user_metadata; treating as verified per Confirm Email setting."
+                )
+            email_verified = True
+
+    if email_verified:
+        role = role_for_email(email)
+        uid = legacy_uid_for_email(email) or sub
+    else:
+        role = "public"
+        uid = sub
+
+    name = (
+        user_metadata.get("full_name")
+        or user_metadata.get("name")
+        or (email.split("@")[0] if email else "")
+        or "Resident"
     )
+
+    return User(uid=str(uid), name=str(name), email=email, role=role)
+
+
+def _verify_supabase(token: str) -> User:
+    token_hash = hashlib.sha256(token.encode("utf-8")).hexdigest()
+    now = time.time()
+
+    if token_hash in _token_cache:
+        exp_time, cached_user = _token_cache[token_hash]
+        if now < exp_time:
+            return cached_user
+        _token_cache.pop(token_hash, None)
+
+    try:
+        header = jwt.get_unverified_header(token)
+    except Exception as exc:
+        raise HTTPException(401, f"Invalid token header: {exc}")
+
+    alg = header.get("alg")
+    if alg not in ("ES256", "RS256", "HS256"):
+        raise HTTPException(401, f"Unsupported token algorithm: {alg}")
+
+    if alg == "HS256":
+        claims = _verify_with_auth_server(token)
+    else:
+        try:
+            jwks_client = _get_jwks_client()
+            signing_key = jwks_client.get_signing_key_from_jwt(token)
+        except Exception:
+            # Fall back to Auth server check
+            claims = _verify_with_auth_server(token)
+            signing_key = None
+
+        if signing_key is not None:
+            try:
+                claims = jwt.decode(
+                    token,
+                    signing_key.key,
+                    algorithms=[alg],
+                    audience="authenticated",
+                    issuer=f"{settings.supabase_url}/auth/v1",
+                    options={"require": ["exp", "sub"]},
+                    leeway=CLOCK_SKEW_SECONDS,
+                )
+            except jwt.InvalidTokenError as exc:
+                raise HTTPException(401, f"Sign-in could not be verified: {exc}")
+
+    user = _build_user_from_claims(claims)
+
+    exp = float(claims.get("exp", now + 60))
+    ttl = min(max(0.0, exp - now), 60.0)
+    if ttl > 0:
+        if len(_token_cache) >= _CACHE_MAX:
+            expired = [k for k, (exp_t, _) in _token_cache.items() if exp_t <= now]
+            for k in expired:
+                _token_cache.pop(k, None)
+            if len(_token_cache) >= _CACHE_MAX:
+                _token_cache.pop(next(iter(_token_cache)))
+        _token_cache[token_hash] = (now + ttl, user)
+
+    return user
 
 
 _DEV_ROLES = {"0": "public", "public": "public", "w": "worker", "worker": "worker", "1": "admin", "admin": "admin"}
@@ -116,9 +233,9 @@ def _user_from_header(authorization: str | None) -> User | None:
     token = authorization.split(" ", 1)[1].strip()
     if settings.dev_auth:
         return _verify_dev(token)
-    if not settings.firebase_enabled:
-        raise HTTPException(503, "Sign-in is not configured on this server (set FIREBASE_* variables).")
-    return _verify_firebase(token)
+    if not settings.supabase_enabled:
+        raise HTTPException(503, "Sign-in is not configured on this server (set SUPABASE_URL and SUPABASE_ANON_KEY).")
+    return _verify_supabase(token)
 
 
 def optional_user(authorization: str | None = Header(default=None)) -> User | None:

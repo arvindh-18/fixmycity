@@ -24,13 +24,11 @@ def health():
 def public_config():
     """Everything the frontend needs at runtime, so one build works in every environment."""
     return {
-        "auth_mode": "firebase" if settings.firebase_enabled else ("dev" if settings.dev_auth else "none"),
-        "firebase": {
-            "apiKey": settings.firebase_api_key,
-            "authDomain": settings.firebase_auth_domain,
-            "projectId": settings.firebase_project_id,
-            "appId": settings.firebase_app_id,
-        } if settings.firebase_enabled else None,
+        "auth_mode": "supabase" if settings.supabase_enabled else ("dev" if settings.dev_auth else "none"),
+        "supabase": {
+            "url": settings.supabase_url,
+            "anonKey": settings.supabase_anon_key,
+        } if settings.supabase_enabled else None,
         "ai_enabled": settings.ai_enabled,
         "city": {"name": settings.city_name, "lat": settings.city_lat, "lng": settings.city_lng},
         "categories": [{"id": k, "label": v} for k, v in CATEGORIES.items()],

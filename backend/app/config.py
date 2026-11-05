@@ -1,6 +1,9 @@
 """All configuration comes from environment variables (or a .env file). Nothing else to set up."""
+import logging
 import os
 from pathlib import Path
+
+logger = logging.getLogger("fixmycity.config")
 
 
 def _load_dotenv() -> None:
@@ -29,13 +32,9 @@ class Settings:
     # Database: SQLite file by default, any Postgres URL in the cloud.
     database_url = _env("DATABASE_URL", "sqlite:///./fixmycity.db")
 
-    # Firebase Authentication (web config is public; it is served to the frontend at runtime).
-    firebase_project_id = _env("FIREBASE_PROJECT_ID")
-    firebase_api_key = _env("FIREBASE_API_KEY")
-    firebase_auth_domain = _env("FIREBASE_AUTH_DOMAIN") or (
-        f"{_env('FIREBASE_PROJECT_ID')}.firebaseapp.com" if _env("FIREBASE_PROJECT_ID") else ""
-    )
-    firebase_app_id = _env("FIREBASE_APP_ID")
+    # Supabase Authentication (public URL and anon key; served to frontend at runtime).
+    supabase_url = _env("SUPABASE_URL").rstrip("/")
+    supabase_anon_key = _env("SUPABASE_ANON_KEY")
 
     # Comma-separated emails that can change issue status.
     admin_emails = {e.strip().lower() for e in _env("ADMIN_EMAILS").split(",") if e.strip()}
@@ -58,17 +57,24 @@ class Settings:
     max_upload_mb = int(_env("MAX_UPLOAD_MB", "10"))
 
     @property
-    def firebase_enabled(self) -> bool:
-        return bool(self.firebase_project_id and self.firebase_api_key)
+    def supabase_enabled(self) -> bool:
+        return bool(self.supabase_url and self.supabase_anon_key)
 
     @property
     def dev_auth(self) -> bool:
-        """Without Firebase keys (and outside production) the app offers one-click demo sign-in."""
-        return not self.firebase_enabled and self.environment != "production"
+        """Without Supabase keys (and outside production) the app offers one-click demo sign-in."""
+        return not self.supabase_enabled and self.environment != "production"
 
     @property
     def ai_enabled(self) -> bool:
         return bool(self.gemini_api_key)
 
+
+_old_firebase = [k for k in os.environ if k.startswith("FIREBASE_")]
+if _old_firebase:
+    logger.warning(
+        "FIREBASE_* environment variables are set (%s) but ignored: FixMyCity now uses Supabase Auth.",
+        ", ".join(_old_firebase),
+    )
 
 settings = Settings()
