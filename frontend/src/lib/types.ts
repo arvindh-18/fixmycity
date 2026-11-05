@@ -62,6 +62,11 @@ export interface Issue {
   resolved_at: string | null;
   updates?: Update[];
   distance_m?: number;
+  original_text: string;
+  merged_into: number | null;
+  assigned_to_email: string;
+  after_photo_url: string | null;
+  unread?: number;
 }
 
 export interface Area {

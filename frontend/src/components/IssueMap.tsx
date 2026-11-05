@@ -1,6 +1,6 @@
 import L from "leaflet";
 import { useEffect, useMemo } from "react";
-import { AttributionControl, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import { AttributionControl, Circle, MapContainer, Marker, Popup, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import { Link } from "react-router-dom";
 import type { Issue } from "../lib/types";
 import { STATUS } from "./ui";
@@ -26,15 +26,31 @@ export function statusIcon(status: Issue["status"], active = false) {
   return iconCache.get(key)!;
 }
 
-function FitTo({ issues, fallback }: { issues: Issue[]; fallback: [number, number] }) {
+export type Here = { lat: number; lng: number; accuracy: number };
+
+const hereIcon = L.divIcon({ className: "", html: '<div class="here-dot"></div>', iconSize: [18, 18], iconAnchor: [9, 9] });
+
+function FitTo({ issues, fallback, here }: { issues: Issue[]; fallback: [number, number]; here?: Here | null }) {
   const map = useMap();
-  const key = issues.map((i) => i.id).join(",");
+  const key = issues.map((i) => i.id).join(",") + (here ? `@${here.lat},${here.lng}` : "");
   useEffect(() => {
-    if (!issues.length) return void map.setView(fallback, 12);
-    if (issues.length === 1) return void map.setView([issues[0].lat, issues[0].lng], 15);
-    map.fitBounds(L.latLngBounds(issues.map((i) => [i.lat, i.lng])), { padding: [40, 40], maxZoom: 15 });
+    const pts: [number, number][] = issues.map((i) => [i.lat, i.lng]);
+    if (here) pts.push([here.lat, here.lng]);
+    if (!pts.length) return void map.setView(fallback, 12);
+    if (pts.length === 1) return void map.setView(pts[0], 15);
+    map.fitBounds(L.latLngBounds(pts), { padding: [40, 40], maxZoom: 16 });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key]);
+  return null;
+}
+
+/** Pans to the highlighted marker when it's picked from a list. */
+function PanTo({ issue }: { issue?: Issue }) {
+  const map = useMap();
+  useEffect(() => {
+    if (issue && !map.getBounds().contains([issue.lat, issue.lng])) map.panTo([issue.lat, issue.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue?.id]);
   return null;
 }
 
@@ -49,12 +65,14 @@ function Resize() {
 }
 
 export function IssueMap({
-  issues, center, activeId, onHover, className = "",
+  issues, center, activeId, onHover, onSelect, here, className = "",
 }: {
   issues: Issue[];
   center: [number, number];
   activeId?: number | null;
   onHover?: (id: number | null) => void;
+  onSelect?: (id: number) => void;
+  here?: Here | null;
   className?: string;
 }) {
   const markers = useMemo(() => issues.filter((i) => i.lat && i.lng), [issues]);
@@ -62,15 +80,27 @@ export function IssueMap({
     <MapContainer center={center} zoom={12} scrollWheelZoom attributionControl={false} className={`map-soft h-full w-full ${className}`}>
       <AttributionControl prefix={false} />
       <TileLayer url={OSM_TILES} attribution={OSM_ATTR} maxZoom={19} />
-      <FitTo issues={markers} fallback={center} />
+      <FitTo issues={markers} fallback={center} here={here} />
+      <PanTo issue={markers.find((i) => i.id === activeId)} />
       <Resize />
+      {here && (
+        <>
+          <Circle center={[here.lat, here.lng]} radius={Math.min(here.accuracy, 500)}
+            pathOptions={{ color: "#2B5BA8", weight: 1, fillOpacity: 0.08 }} />
+          <Marker position={[here.lat, here.lng]} icon={hereIcon} zIndexOffset={3000} title="You are here" />
+        </>
+      )}
       {markers.map((i) => (
         <Marker
           key={i.id}
           position={[i.lat, i.lng]}
           icon={statusIcon(i.status, activeId === i.id)}
           zIndexOffset={activeId === i.id ? 1000 : 0}
-          eventHandlers={{ mouseover: () => onHover?.(i.id), mouseout: () => onHover?.(null) }}
+          eventHandlers={{
+            mouseover: () => onHover?.(i.id),
+            mouseout: () => onHover?.(null),
+            click: () => onSelect?.(i.id),
+          }}
         >
           <Popup>
             <Link to={`/issues/${i.id}`} className="block min-w-44 !text-ink no-underline">

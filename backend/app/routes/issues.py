@@ -46,6 +46,10 @@ def serialize(issue: Issue, user: User | None, voted: set[int] | None = None, de
         "created_at": iso(issue.created_at),
         "updated_at": iso(issue.updated_at),
         "resolved_at": iso(issue.resolved_at),
+        "original_text": issue.original_text or "",
+        "merged_into": issue.merged_into,
+        "assigned_to_email": issue.assigned_to_email or "",
+        "after_photo_url": f"/api/issues/{issue.id}/after-photo" if issue.has_after_photo else None,
     }
     if detail:
         data["updates"] = [
@@ -129,6 +133,26 @@ def nearby(lat: float, lng: float, category: str = "", radius: int = Query(150, 
         stmt = stmt.where(Issue.category == category)
     rows = [(i, _distance_m(lat, lng, i.lat, i.lng)) for i in db.scalars(stmt)]
     rows = sorted((r for r in rows if r[1] <= radius), key=lambda r: r[1])[:5]
+    voted = _voted(db, user, [i.id for i, _ in rows])
+    return [{**serialize(i, user, voted), "distance_m": round(dist)} for i, dist in rows]
+
+
+@router.get("/near")
+def near(lat: float, lng: float, radius: int = Query(2000, ge=100, le=10000), status: str = "",
+         unassigned: bool = False, limit: int = Query(200, le=500),
+         db: Session = Depends(get_db), user: User | None = Depends(optional_user)):
+    """Every report around a point (e.g. "my location"), closest first. `status` may also be `active`."""
+    d = radius / 111_000
+    dlng = d / max(0.2, math.cos(math.radians(lat)))
+    stmt = select(Issue).where(Issue.lat.between(lat - d, lat + d), Issue.lng.between(lng - dlng, lng + dlng))
+    if status == "active":
+        stmt = stmt.where(Issue.status.in_(("open", "in_progress")))
+    elif status:
+        stmt = stmt.where(Issue.status == status)
+    if unassigned:
+        stmt = stmt.where(or_(Issue.assigned_to_email.is_(None), Issue.assigned_to_email == ""))
+    rows = [(i, _distance_m(lat, lng, i.lat, i.lng)) for i in db.scalars(stmt)]
+    rows = sorted((r for r in rows if r[1] <= radius), key=lambda r: r[1])[:limit]
     voted = _voted(db, user, [i.id for i, _ in rows])
     return [{**serialize(i, user, voted), "distance_m": round(dist)} for i, dist in rows]
 
