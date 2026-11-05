@@ -231,6 +231,10 @@ def _user_from_header(authorization: str | None) -> User | None:
     if not authorization or not authorization.lower().startswith("bearer "):
         return None
     token = authorization.split(" ", 1)[1].strip()
+    if token.startswith("dev:"):
+        if settings.environment == "production":
+            raise HTTPException(401, "Demo tokens are not allowed in production.")
+        return _verify_dev(token)
     if settings.dev_auth:
         return _verify_dev(token)
     if not settings.supabase_enabled:

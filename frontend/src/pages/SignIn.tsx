@@ -199,7 +199,7 @@ export default function SignIn() {
     await run(() => signInPhone(clean, password));
   }
 
-  const shownError = error || (ready && !me ? authError : "");
+  const shownError = error || (ready && !me && authError ? friendlyAuthError(new Error(authError)) : "");
 
   return (
     <div className="mx-auto max-w-md px-4 py-12 sm:py-16">

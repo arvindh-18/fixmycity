@@ -357,6 +357,13 @@ export function friendlyAuthError(err: unknown): string {
     return codeMap[code];
   }
 
+  if (
+    msg.includes("not enough segments") ||
+    msg.includes("invalid token") ||
+    msg.includes("invalid session")
+  ) {
+    return "Session expired. Please sign in again.";
+  }
   if (msg.includes("invalid login credentials") || msg.includes("invalid credentials")) {
     return "Email or password is wrong.";
   }
