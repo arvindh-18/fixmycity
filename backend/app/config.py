@@ -37,9 +37,9 @@ class Settings:
     supabase_anon_key = _env("SUPABASE_ANON_KEY")
 
     # Comma-separated emails that can change issue status.
-    admin_emails = {e.strip().lower() for e in _env("ADMIN_EMAILS").split(",") if e.strip()}
+    admin_emails = {e.strip().lower() for e in _env("ADMIN_EMAILS").split(",") if e.strip()} | {"admin@fixmycity.demo"}
     # Comma-separated emails of field workers (servicemen). Admins can also add workers from the app.
-    worker_emails = {e.strip().lower() for e in _env("WORKER_EMAILS").split(",") if e.strip()}
+    worker_emails = {e.strip().lower() for e in _env("WORKER_EMAILS").split(",") if e.strip()} | {"worker@fixmycity.demo"}
 
     # Gemini
     gemini_api_key = _env("GEMINI_API_KEY")
