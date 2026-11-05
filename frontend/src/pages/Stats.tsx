@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AreaSearch } from "../components/AreaSearch";
+import { ProofOfWork } from "../components/ProofOfWork";
 import { CategoryIcon, Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -98,7 +99,11 @@ export default function Stats() {
             </div>
           </div>
 
-          <div className="mt-10 grid gap-6 md:grid-cols-2">
+          <div className="mt-10">
+            <ProofOfWork pincode={pincode} locality={locality} />
+          </div>
+
+          <div className="mt-6 grid gap-6 md:grid-cols-2">
             <section className="card p-6">
               <h2 className="font-sans text-lg font-bold tracking-normal">Open problems by type</h2>
               <div className="mt-5">
