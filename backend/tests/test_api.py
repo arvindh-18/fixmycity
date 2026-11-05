@@ -150,7 +150,10 @@ def test_chat_only_for_reporter_and_staff_with_unread_counts():
     assert [m["body"] for m in msgs] == ["Crew coming Thursday"] and not msgs[0]["is_mine"]
     assert client.get("/api/issues", params={"mine": True}, headers=CITIZEN).json()[0]["unread"] == 0
     client.post(f"/api/issues/{iid}/messages", json={"body": "Thanks!"}, headers=CITIZEN)
-    assert len(client.get(f"/api/issues/{iid}/messages", params={"after": msgs[0]["id"]}, headers=ADMIN).json()) == 1
+    assert len(client.get(f"/api/issues/{iid}/messages", params={"after": msgs[0]["id"]}, headers=WORKER).json()) == 1
+    # Admins are not part of the resident <-> worker chat.
+    assert client.get(f"/api/issues/{iid}/messages", headers=ADMIN).status_code == 403
+    assert client.post(f"/api/issues/{iid}/messages", json={"body": "x"}, headers=ADMIN).status_code == 403
 
 
 def test_ai_analyze_uses_gemini(monkeypatch):
@@ -204,7 +207,7 @@ def test_close_similar_report_is_flagged_and_admin_merges():
     assert kept["upvotes"] == 1
     assert gone["status"] == "rejected" and gone["merged_into"] == a["id"]
     assert any("Merged" in u["note"] for u in kept["updates"]) and any("Merged" in u["note"] for u in gone["updates"])
-    assert len(client.get(f"/api/issues/{a['id']}/messages", headers=ADMIN).json()) == 2
+    assert len(client.get(f"/api/issues/{a['id']}/messages", headers=WORKER).json()) == 2
     assert client.get("/api/admin/duplicates", headers=ADMIN).json() == []
     assert client.post(f"/api/admin/duplicates/{fid}/dismiss", headers=ADMIN).status_code == 409
 
@@ -226,10 +229,14 @@ def test_admin_assigns_job_and_worker_sees_it():
     iid = report().json()["id"]
     assert client.post(f"/api/issues/{iid}/assign", json={"email": "ravi@demo.local"}, headers=WORKER).status_code == 403
     assert client.post(f"/api/issues/{iid}/assign", json={"email": "meera@demo.local"}, headers=ADMIN).status_code == 422
-    client.post("/api/staff", json={"email": "ravi@demo.local"}, headers=ADMIN)
+    client.post("/api/staff", json={"email": "ravi@demo.local", "name": "Ravi"}, headers=ADMIN)
     r = client.post(f"/api/issues/{iid}/assign", json={"email": "ravi@demo.local"}, headers=ADMIN)
     assert r.status_code == 200 and r.json()["assigned_to_email"] == "ravi@demo.local"
-    assert "Assigned to ravi@demo.local." in [u["note"] for u in r.json()["updates"]]
+    assert "Assigned to field worker Ravi." in [u["note"] for u in r.json()["updates"]]
+    # Everyone sees who's on it by name; the email stays with staff.
+    public = client.get(f"/api/issues/{iid}").json()
+    assert public["assigned_to_name"] == "Ravi" and public["assigned_to_email"] == ""
+    assert not any("@" in u["note"] for u in public["updates"])
     staff = client.get("/api/staff", headers=ADMIN).json()
     assert next(m for m in staff if m["email"] == "ravi@demo.local")["open_jobs"] == 1
     jobs = client.get("/api/issues", params={"worker": "me", "status": "active"}, headers=WORKER).json()
@@ -251,3 +258,29 @@ def test_weekly_proof_of_work_and_recent_fixes():
     assert sum(w["reported"] for w in weeks[:-1]) == 0
     fixes = client.get("/api/stats/recent-fixes").json()
     assert [f["id"] for f in fixes] == [a] and fixes[0]["after_photo_url"]
+
+
+def test_only_residents_other_than_the_reporter_can_upvote():
+    iid = report().json()["id"]  # reported by CITIZEN
+    r = client.post(f"/api/issues/{iid}/upvote", headers=CITIZEN)
+    assert r.status_code == 403 and "reported this" in r.json()["detail"]
+    assert client.post(f"/api/issues/{iid}/upvote", headers=WORKER).status_code == 403
+    assert client.post(f"/api/issues/{iid}/upvote", headers=ADMIN).status_code == 403
+    assert client.post(f"/api/issues/{iid}/upvote", headers=OTHER).json() == {"upvotes": 1, "upvoted": True}
+
+
+def test_chat_is_reporter_and_the_assigned_worker_only():
+    iid = report().json()["id"]
+    selvi = {"Authorization": "Bearer dev:selvi:Selvi:w"}
+    # Unassigned: any worker may reply (and starting work picks the job up).
+    assert client.post(f"/api/issues/{iid}/messages", json={"body": "I can take this"}, headers=selvi).status_code == 201
+    client.post(f"/api/issues/{iid}/status", json={"status": "in_progress"}, headers=WORKER)
+    issue = client.get(f"/api/issues/{iid}", headers=ADMIN).json()
+    assert issue["assigned_to_email"] == "ravi@demo.local" and issue["assigned_to_name"] == "Ravi"
+    # Now only Ravi (and the reporter) can chat or act on it.
+    assert client.get(f"/api/issues/{iid}/messages", headers=selvi).status_code == 403
+    assert client.get(f"/api/issues/{iid}/messages", headers=WORKER).status_code == 200
+    assert client.get(f"/api/issues/{iid}/messages", headers=CITIZEN).status_code == 200
+    assert client.post(f"/api/issues/{iid}/fix", files={"photo": ("a.jpg", jpeg(), "image/jpeg")}, headers=selvi).status_code == 403
+    r = client.post(f"/api/issues/{iid}/fix", files={"photo": ("a.jpg", jpeg(), "image/jpeg")}, headers=WORKER)
+    assert r.status_code == 200 and r.json()["fixed_by_name"] == "Ravi"

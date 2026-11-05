@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session, undefer
 from .. import duplicates, geocode
 from ..auth import User, admin_user, current_user, optional_user, role_for_email, staff_user
 from ..config import settings
-from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StatusUpdate, Upvote, get_db, now
+from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StaffMember, StatusUpdate, Upvote, get_db, now
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 
@@ -48,7 +48,12 @@ def serialize(issue: Issue, user: User | None, voted: set[int] | None = None, de
         "resolved_at": iso(issue.resolved_at),
         "original_text": issue.original_text or "",
         "merged_into": issue.merged_into,
-        "assigned_to_email": issue.assigned_to_email or "",
+        # Transparency: everyone sees who is on the job by name; only staff see the email.
+        "assigned_to_email": (issue.assigned_to_email or "") if user and user.is_staff else "",
+        "assigned_to_name": issue.assigned_to_name or "",
+        "assigned_at": iso(issue.assigned_at),
+        "fixed_by_name": issue.fixed_by_name or "",
+        "is_assigned_to_me": bool(user and user.email and issue.assigned_to_email == user.email),
         "after_photo_url": f"/api/issues/{issue.id}/after-photo" if issue.has_after_photo else None,
     }
     if detail:
@@ -266,9 +271,35 @@ def get_after_photo(issue_id: int, db: Session = Depends(get_db)):
     return Response(issue.after_photo, media_type="image/jpeg", headers={"Cache-Control": "public, max-age=86400"})
 
 
+def mask_email(email: str) -> str:
+    local, _, domain = (email or "").partition("@")
+    return f"{local[:2]}•••@{domain}" if domain else "a field worker"
+
+
+def staff_name(db: Session, email: str) -> str:
+    """Public display name for a staff member: their name if we know it, else a masked email."""
+    member = db.get(StaffMember, email) if email else None
+    return (member.name if member and member.name else "") or mask_email(email)
+
+
+def _assign_to(issue: Issue, email: str, name: str) -> None:
+    issue.assigned_to_email, issue.assigned_to_name, issue.assigned_at = email, name, now()
+
+
+def _check_worker_owns(issue: Issue, user: User) -> None:
+    """A worker may act on unassigned jobs (picking them up) or their own, not a colleague's."""
+    if user.is_worker and issue.assigned_to_email and issue.assigned_to_email != user.email:
+        raise HTTPException(403, f"This job is assigned to {issue.assigned_to_name or 'another worker'}.")
+
+
 @router.post("/{issue_id}/upvote")
 def toggle_upvote(issue_id: int, db: Session = Depends(get_db), user: User = Depends(current_user)):
     issue = _get(db, issue_id)
+    # +1 is a resident's "me too": staff don't vote, and a reporter's own report already counts them.
+    if user.is_staff:
+        raise HTTPException(403, "Only residents can +1 reports. Staff see every report anyway.")
+    if user.uid == issue.reporter_uid:
+        raise HTTPException(403, "You reported this, so you're already counted. +1 is for neighbours who've seen it too.")
     existing = db.scalar(select(Upvote).where(Upvote.issue_id == issue_id, Upvote.uid == user.uid))
     if existing:
         db.delete(existing)
@@ -295,6 +326,7 @@ def set_status(issue_id: int, body: StatusIn, db: Session = Depends(get_db), use
     if user.is_worker and body.status not in WORKER_STATUSES:
         raise HTTPException(403, "Field workers can mark a report as 'Being fixed' or 'Fixed'. Ask an admin to close or reopen it.")
     issue = _get(db, issue_id)
+    _check_worker_owns(issue, user)
     if user.is_worker and body.status == "resolved" and not issue.has_after_photo:
         raise HTTPException(422, "Add an 'after' photo to mark this fixed. Use the Mark fixed button.")
     if body.status == issue.status and not body.note.strip():
@@ -302,8 +334,10 @@ def set_status(issue_id: int, body: StatusIn, db: Session = Depends(get_db), use
     issue.status = body.status
     issue.updated_at = now()
     issue.resolved_at = now() if body.status == "resolved" else None
+    if user.is_worker and not issue.assigned_to_email:  # starting work picks the job up
+        _assign_to(issue, user.email, user.name)
     if body.status == "resolved":
-        issue.fixed_by_email = user.email
+        issue.fixed_by_email, issue.fixed_by_name = user.email, user.name
     issue.updates.append(StatusUpdate(status=body.status, note=body.note.strip(), by_name=user.name))
     db.commit()
     return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
@@ -316,12 +350,15 @@ async def mark_fixed(issue_id: int, photo: UploadFile = File(...), note: str = F
     issue = _get(db, issue_id)
     if issue.status == "rejected":
         raise HTTPException(409, "This report was closed. Ask an admin to reopen it first.")
+    _check_worker_owns(issue, user)
     raw = await photo.read()
     if len(raw) > settings.max_upload_mb * 1024 * 1024:
         raise HTTPException(413, f"Photo is larger than {settings.max_upload_mb} MB.")
     issue.after_photo, issue.has_after_photo = _process_photo(raw), 1
     issue.status, issue.updated_at, issue.resolved_at = "resolved", now(), now()
-    issue.fixed_by_email = user.email
+    issue.fixed_by_email, issue.fixed_by_name = user.email, user.name
+    if user.is_worker and not issue.assigned_to_email:
+        _assign_to(issue, user.email, user.name)
     issue.updates.append(StatusUpdate(status="resolved", note=note.strip() or "Fixed. See the after photo.", by_name=user.name))
     db.commit()
     return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
@@ -339,9 +376,13 @@ def assign(issue_id: int, body: AssignIn, db: Session = Depends(get_db), user: U
         raise HTTPException(422, "That email isn't on the team. Add it under Admin → Team first.")
     if (issue.assigned_to_email or "") == email:
         return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
-    issue.assigned_to_email = email or None
+    if email:
+        _assign_to(issue, email, staff_name(db, email))
+    else:
+        issue.assigned_to_email, issue.assigned_to_name, issue.assigned_at = None, "", None
     issue.updated_at = now()
-    note = f"Assigned to {email}." if email else "Unassigned."
+    # The public timeline names the worker, never their email.
+    note = f"Assigned to field worker {issue.assigned_to_name}." if email else "Unassigned."
     issue.updates.append(StatusUpdate(status=issue.status, note=note, by_name=user.name))
     db.commit()
     return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)

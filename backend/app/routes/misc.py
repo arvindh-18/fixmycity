@@ -20,6 +20,16 @@ def health():
     return {"ok": True}
 
 
+def _demo_config() -> dict:
+    from .. import demo
+
+    return {
+        "location": {"lat": settings.demo_lat, "lng": settings.demo_lng, "label": settings.demo_label},
+        "personas": [{k: p[k] for k in ("token", "name", "role", "blurb")} for p in demo.PERSONAS],
+        "offline_ai": not settings.gemini_api_key,
+    }
+
+
 @router.get("/config")
 def public_config():
     """Everything the frontend needs at runtime, so one build works in every environment."""
@@ -30,13 +40,19 @@ def public_config():
             "anonKey": settings.supabase_anon_key,
         } if settings.supabase_enabled else None,
         "ai_enabled": settings.ai_enabled,
+        "demo": _demo_config() if settings.demo_mode and settings.environment != "production" else None,
         "city": {"name": settings.city_name, "lat": settings.city_lat, "lng": settings.city_lng},
         "categories": [{"id": k, "label": v} for k, v in CATEGORIES.items()],
     }
 
 
 @router.get("/me")
-def me(user: User = Depends(current_user)):
+def me(user: User = Depends(current_user), db: Session = Depends(get_db)):
+    if user.is_staff and user.name:  # remember staff names so residents see "Ravi", not an email
+        member = db.get(StaffMember, user.email)
+        if member and member.name != user.name:
+            member.name = user.name
+            db.commit()
     return {"uid": user.uid, "name": user.name, "email": user.email, "role": user.role, "is_admin": user.is_admin}
 
 
@@ -45,15 +61,16 @@ def me(user: User = Depends(current_user)):
 class StaffIn(BaseModel):
     email: str = Field(..., min_length=3, max_length=254)
     role: str = Field("worker", pattern="^(worker|admin)$")
+    name: str = Field("", max_length=120)
 
 
 def _staff_list(db: Session) -> list[dict]:
-    rows = {m.email: {"email": m.email, "role": m.role, "source": "app", "added_by": m.added_by}
+    rows = {m.email: {"email": m.email, "name": m.name or "", "role": m.role, "source": "app", "added_by": m.added_by}
             for m in db.scalars(select(StaffMember).order_by(StaffMember.created_at))}
     for e in sorted(settings.worker_emails):
-        rows.setdefault(e, {"email": e, "role": "worker", "source": "env", "added_by": ""})
+        rows.setdefault(e, {"email": e, "name": "", "role": "worker", "source": "env", "added_by": ""})
     for e in sorted(settings.admin_emails):  # ADMIN_EMAILS always wins
-        rows[e] = {"email": e, "role": "admin", "source": "env", "added_by": ""}
+        rows[e] = {"email": e, "name": "", "role": "admin", "source": "env", "added_by": ""}
     jobs = dict(db.execute(select(Issue.assigned_to_email, func.count(Issue.id))
                            .where(Issue.status.in_(("open", "in_progress")), Issue.assigned_to_email.is_not(None))
                            .group_by(Issue.assigned_to_email)).all())
@@ -76,6 +93,8 @@ def add_staff(body: StaffIn, db: Session = Depends(get_db), user: User = Depends
         raise HTTPException(409, "That email is already an admin (set in ADMIN_EMAILS).")
     member = db.get(StaffMember, email) or StaffMember(email=email)
     member.role, member.added_by = body.role, user.name
+    if body.name.strip():
+        member.name = body.name.strip()
     db.add(member)
     db.commit()
     return _staff_list(db)

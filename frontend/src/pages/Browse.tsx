@@ -111,7 +111,7 @@ export default function Browse() {
         <button className="chip" aria-pressed={nearMe} onClick={() => setNearMe((v) => !v)}>
           <LocateFixed size={15} /> Use my location
         </button>
-        {me && (
+        {me?.role === "public" && (
           <button className="chip" aria-pressed={mine} onClick={() => set({ mine: mine ? "" : "1" })}>
             Only mine
           </button>

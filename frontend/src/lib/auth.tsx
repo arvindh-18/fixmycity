@@ -28,6 +28,8 @@ interface AuthState {
   signInEmail: (email: string, password: string, create: boolean, name?: string) => Promise<Me | null>;
   signInPhone: (phone: string, password: string, name?: string) => Promise<Me | null>;
   signInDemo: (role: Role) => Promise<Me>;
+  /** Demo builds: sign in as a specific persona (`dev:<uid>:<name>:<role>`). */
+  signInToken: (token: string) => Promise<Me>;
   signOut: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
   setNewPassword: (password: string) => Promise<void>;
@@ -322,6 +324,15 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           localStorage.setItem(DEV_KEY, token);
         } catch {
           /* private mode: token lives only for this page */
+        }
+        setTokenGetter(async () => readDev() ?? token);
+        return loadMe();
+      },
+      async signInToken(token) {
+        try {
+          localStorage.setItem(DEV_KEY, token);
+        } catch {
+          /* private mode */
         }
         setTokenGetter(async () => readDev() ?? token);
         return loadMe();

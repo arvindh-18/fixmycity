@@ -75,6 +75,10 @@ class Issue(Base):
     # Field work
     assigned_to_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
     fixed_by_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
+    # Public names (emails stay private to staff).
+    assigned_to_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default="")
+    assigned_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    fixed_by_name: Mapped[str | None] = mapped_column(String(120), nullable=True, default="")
     after_photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     has_after_photo: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
 
@@ -159,6 +163,7 @@ class StaffMember(Base):
 
     email: Mapped[str] = mapped_column(String(254), primary_key=True)
     role: Mapped[str] = mapped_column(String(16), default="worker")
+    name: Mapped[str | None] = mapped_column(String(120), nullable=True, default="")
     added_by: Mapped[str] = mapped_column(String(120), default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 

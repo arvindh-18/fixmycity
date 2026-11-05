@@ -10,6 +10,8 @@ export interface AppConfig {
   auth_mode: "supabase" | "dev" | "none";
   supabase: { url: string; anonKey: string } | null;
   ai_enabled: boolean;
+  /** Present only in the demo build. */
+  demo?: DemoConfig | null;
   city: { name: string; lat: number; lng: number };
   categories: Category[];
 }
@@ -26,6 +28,7 @@ export interface Me {
 
 export interface StaffMember {
   email: string;
+  name: string;
   role: "worker" | "admin";
   source: "app" | "env";
   added_by: string;
@@ -66,6 +69,10 @@ export interface Issue {
   original_text: string;
   merged_into: number | null;
   assigned_to_email: string;
+  assigned_to_name: string;
+  assigned_at: string | null;
+  fixed_by_name: string;
+  is_assigned_to_me: boolean;
   after_photo_url: string | null;
   unread?: number;
 }
@@ -102,4 +109,17 @@ export interface AiStructured extends AiDraft {
   landmark: string;
   original_language: "en" | "ta" | "hi" | "mixed";
   translated_text: string;
+}
+
+export interface DemoPersona {
+  token: string;
+  name: string;
+  role: Role;
+  blurb: string;
+}
+
+export interface DemoConfig {
+  location: { lat: number; lng: number; label: string };
+  personas: DemoPersona[];
+  offline_ai: boolean;
 }

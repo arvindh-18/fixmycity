@@ -8,6 +8,7 @@ import { VOICE_LANGS, VoiceButton } from "../components/VoiceButton";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
 import { shrinkImage } from "../lib/image";
+import { demoLocation } from "../lib/location";
 import type { AiDraft, AiStructured, Issue, Severity } from "../lib/types";
 
 type Place = { address: string; locality: string; pincode: string };
@@ -86,6 +87,12 @@ export default function Report() {
   }
 
   function locate(silent = false) {
+    const fake = demoLocation(config);
+    if (fake) {
+      // Demo: drop the pin a few metres from the demo spot so nearby reports show up.
+      movePin(fake.lat + (Math.random() - 0.5) * 0.002, fake.lng + (Math.random() - 0.5) * 0.002);
+      return;
+    }
     if (!navigator.geolocation) return;
     setLocating(true);
     navigator.geolocation.getCurrentPosition(
@@ -338,7 +345,10 @@ export default function Report() {
                 <button type="button" onClick={fillFromStory} disabled={structuring || reading} className="btn-ink btn-sm h-10">
                   {structuring ? <Spinner size={15} /> : <Wand2 size={16} />} {structuring ? "Filling in…" : "Fill the form for me"}
                 </button>
-                <span className="text-xs text-ink-3">Speak or type in English, தமிழ் or हिन्दी. You can edit everything after.</span>
+                <span className="text-xs text-ink-3">
+                  Speak or type in English, தமிழ் or हिन्दी. You can edit everything after.
+                  {config?.demo?.offline_ai && " (Demo: an offline keyword model stands in for Gemini.)"}
+                </span>
               </div>
               {structured && (
                 <details className="mt-3 text-sm">
@@ -533,13 +543,13 @@ export default function Report() {
                         <StatusPill status={n.status} /> {n.distance_m} m away
                       </span>
                     </Link>
-                    <button
+                    {!n.is_mine && <button
                       type="button"
                       onClick={() => upvote(n)}
                       className={`btn btn-sm shrink-0 ${n.upvoted ? "bg-civic text-white" : "bg-civic-soft text-civic"}`}
                     >
                       <ThumbsUp size={14} /> {n.upvotes}
-                    </button>
+                    </button>}
                   </li>
                 ))}
               </ul>

@@ -101,7 +101,7 @@ export default function WorkerHome() {
 
       <dl className="mt-5 grid grid-cols-2 gap-px overflow-hidden rounded-[var(--radius-card)] border border-line bg-line">
         <div className="bg-white p-4">
-          <dt className="text-sm text-ink-2">Fixed this week</dt>
+          <dt className="text-sm text-ink-2">Fixed in the last 7 days</dt>
           <dd className="mt-1 font-display text-3xl font-extrabold tabular-nums">{week.count}</dd>
         </div>
         <div className="bg-white p-4">

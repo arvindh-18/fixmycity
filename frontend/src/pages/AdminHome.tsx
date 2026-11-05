@@ -35,7 +35,7 @@ function AssignRow({ issue, workers, onChange }: { issue: Issue; workers: StaffM
       <select id={`as-${issue.id}`} value={issue.assigned_to_email} disabled={busy} onChange={(e) => assign(e.target.value)}
         className="h-9 min-w-0 flex-1 rounded-full border border-line-2 bg-white px-3 text-sm">
         <option value="">Nobody yet</option>
-        {workers.map((w) => <option key={w.email} value={w.email}>{w.email} ({w.open_jobs} open)</option>)}
+        {workers.map((w) => <option key={w.email} value={w.email}>{w.name || w.email} ({w.open_jobs} open)</option>)}
       </select>
       {busy && <Spinner size={14} />}
     </div>
@@ -51,6 +51,7 @@ export default function AdminHome() {
   const [staff, setStaff] = useState<StaffMember[] | null>(null);
   const [dupes, setDupes] = useState<number | null>(null);
   const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
   const [role, setRole] = useState<"worker" | "admin">("worker");
   const [busy, setBusy] = useState(false);
 
@@ -76,8 +77,9 @@ export default function AdminHome() {
     e.preventDefault();
     setBusy(true);
     try {
-      setStaff(await api<StaffMember[]>("/api/staff", { body: { email, role } }));
+      setStaff(await api<StaffMember[]>("/api/staff", { body: { email, role, name } }));
       setEmail("");
+      setName("");
       toast(`${email} can now sign in as a ${role === "admin" ? "city admin" : "field worker"}.`);
     } catch (err) {
       toast((err as Error).message, "err");
@@ -104,7 +106,7 @@ export default function AdminHome() {
         {[
           { label: "Waiting for action", v: stats?.open, sub: "reported, not started" },
           { label: "Being fixed", v: stats?.in_progress, sub: "work in progress" },
-          { label: "Fixed this week", v: stats?.fixed_this_week, sub: `${stats?.this_week ?? "—"} new this week` },
+          { label: "Fixed in the last 7 days", v: stats?.fixed_this_week, sub: `${stats?.this_week ?? "—"} new in the last 7 days` },
           { label: "Days to fix, on average", v: stats?.avg_days_to_fix ?? "—", sub: "from report to fixed" },
         ].map((t) => (
           <div key={t.label} className="bg-white p-5">
@@ -147,8 +149,9 @@ export default function AdminHome() {
 
         <section>
           <h2 className="text-xl font-bold">Team</h2>
-          <p className="mt-1 text-sm text-ink-2">Add a worker's email here. They then sign in on the “Field worker” tab.</p>
+          <p className="mt-1 text-sm text-ink-2">Add a worker here. They sign in on the “Field worker” tab. Residents see their name, never their email.</p>
           <form onSubmit={add} className="mt-4 space-y-2">
+            <input className="field" placeholder="Name residents will see, e.g. Ravi K" value={name} onChange={(e) => setName(e.target.value)} aria-label="Name" maxLength={120} />
             <input type="email" required className="field" placeholder="worker@example.com" value={email} onChange={(e) => setEmail(e.target.value)} aria-label="Email" />
             <div className="flex gap-2">
               <select className="field" value={role} onChange={(e) => setRole(e.target.value as "worker" | "admin")} aria-label="Role">
@@ -163,7 +166,8 @@ export default function AdminHome() {
               staff.map((m) => (
                 <li key={m.email} className="flex items-center gap-3 p-3">
                   <div className="min-w-0 flex-1">
-                    <div className="truncate text-[15px] font-medium">{m.email}</div>
+                    <div className="truncate text-[15px] font-medium">{m.name || m.email}</div>
+                    {m.name && <div className="truncate text-xs text-ink-3">{m.email}</div>}
                     <div className="text-xs text-ink-3">
                       {m.role === "admin" ? "City admin" : "Field worker"}
                       {m.role === "worker" && ` · ${m.open_jobs} open job${m.open_jobs === 1 ? "" : "s"}`}

@@ -150,6 +150,24 @@ Koyeb all run the same image.
 
 ---
 
+## Demo build
+
+`DEMO_MODE=1` turns this same code into a self-contained demo: mock data around Saveetha Engineering College
+(`python backend/demo_seed.py`), a **Demo box** to switch between resident / field worker / admin personas, a guided
+tour, a developer console at `/dev`, and an offline stand-in for Gemini. All of it is refused when
+`ENVIRONMENT=production`.
+
+## Who can do what
+
+| | Visitor | Resident | Field worker | City admin |
+|---|---|---|---|---|
+| See every report, timeline, who's responsible, before/after, proof-of-work chart | ✓ | ✓ | ✓ | ✓ |
+| Report a problem | | ✓ | | |
+| +1 a report | | not their own | | |
+| Chat | | their reports | their jobs (or unassigned) | |
+| Start work / mark fixed (after photo required) | | | ✓ | any status |
+| Assign, merge duplicates, close, delete, team | | | | ✓ |
+
 ## API at a glance
 
 Interactive docs at `/docs`.

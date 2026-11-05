@@ -5,6 +5,7 @@ import json
 import httpx
 from fastapi import HTTPException
 
+from . import mock_ai
 from .config import settings
 from .db import CATEGORIES, SEVERITIES
 
@@ -34,6 +35,11 @@ SCHEMA = {
 }
 
 
+def _offline() -> bool:
+    """Demo builds without a key answer from a small offline keyword model instead of Gemini."""
+    return settings.demo_mode and not settings.gemini_api_key
+
+
 def _call(parts: list[dict], json_schema: dict | None = None) -> str:
     if not settings.ai_enabled:
         raise HTTPException(503, "AI is not configured (set GEMINI_API_KEY).")
@@ -59,6 +65,8 @@ def _call(parts: list[dict], json_schema: dict | None = None) -> str:
 
 
 def analyze_photo(image: bytes, mime: str, note: str = "") -> dict:
+    if _offline():
+        return mock_ai.analyze_photo(note)
     hint = f'The resident also said: "{note}"' if note.strip() else ""
     text = _call(
         [
@@ -77,6 +85,8 @@ def analyze_photo(image: bytes, mime: str, note: str = "") -> dict:
 
 
 def transcribe(audio: bytes, mime: str) -> str:
+    if _offline():
+        raise HTTPException(503, "Voice recording needs a Gemini key. In the demo, use Chrome or Edge: their built-in speech recognition works offline.")
     return _call(
         [
             {"text": "Transcribe this voice note about a civic problem. Return only the spoken words, "
@@ -124,6 +134,8 @@ STRUCTURE_SCHEMA = {
 
 
 def structure_text(text: str, lang: str = "en") -> dict:
+    if _offline():
+        return mock_ai.structure_text(text, lang)
     prompt = STRUCTURE_PROMPT.replace("{lang}", LANG_NAMES.get(lang, "English")).replace("{text}", text.strip()[:3000])
     try:
         data = json.loads(_call([{"text": prompt}], STRUCTURE_SCHEMA))

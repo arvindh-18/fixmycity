@@ -30,6 +30,10 @@ app.include_router(misc.router)
 app.include_router(issues.router)
 app.include_router(messages.router)
 app.include_router(admin.router)
+if settings.demo_mode and settings.environment != "production":
+    from .routes import dev
+
+    app.include_router(dev.router)
 
 
 # ---- Frontend (only when it has been built into ./static or ../frontend/dist) ----

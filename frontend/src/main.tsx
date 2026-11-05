@@ -8,6 +8,7 @@ import { AuthProvider, homeFor, useAuth } from "./lib/auth";
 import type { Role } from "./lib/types";
 import AdminDuplicates from "./pages/AdminDuplicates";
 import AdminHome from "./pages/AdminHome";
+import DevConsole from "./pages/DevConsole";
 import Browse from "./pages/Browse";
 import Home from "./pages/Home";
 import IssueDetail from "./pages/IssueDetail";
@@ -16,7 +17,7 @@ import SignIn from "./pages/SignIn";
 import Stats from "./pages/Stats";
 import WorkerHome from "./pages/WorkerHome";
 
-/** `roles` limits the page to those roles; admins can open every page. */
+/** `roles` limits the page to exactly those roles. */
 function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: Role[] }) {
   const { me, ready } = useAuth();
   const loc = useLocation();
@@ -25,7 +26,8 @@ function RequireAuth({ children, roles }: { children: React.ReactNode; roles?: R
     const as = roles?.length === 1 ? `&as=${roles[0]}` : "";
     return <Navigate to={`/signin?next=${encodeURIComponent(loc.pathname)}${as}`} replace />;
   }
-  if (roles && me.role !== "admin" && !roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />;
+  // Each role gets its own screens; nobody (admins included) lands on another role's page.
+  if (roles && !roles.includes(me.role)) return <Navigate to={homeFor(me.role)} replace />;
   return <>{children}</>;
 }
 
@@ -41,10 +43,11 @@ createRoot(document.getElementById("root")!).render(
               <Route path="issues/:id" element={<IssueDetail />} />
               <Route path="stats" element={<Stats />} />
               <Route path="signin" element={<SignIn />} />
-              <Route path="report" element={<RequireAuth><Report /></RequireAuth>} />
+              <Route path="report" element={<RequireAuth roles={["public"]}><Report /></RequireAuth>} />
               <Route path="admin" element={<RequireAuth roles={["admin"]}><AdminHome /></RequireAuth>} />
               <Route path="admin/duplicates" element={<RequireAuth roles={["admin"]}><AdminDuplicates /></RequireAuth>} />
               <Route path="worker" element={<RequireAuth roles={["worker"]}><WorkerHome /></RequireAuth>} />
+              <Route path="dev" element={<DevConsole />} />
               <Route path="*" element={<Navigate to="/" replace />} />
             </Route>
           </Routes>

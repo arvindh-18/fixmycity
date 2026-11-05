@@ -79,7 +79,7 @@ export default function Stats() {
               { label: "Open now", v: s.open + s.in_progress, sub: `${s.in_progress} being fixed` },
               { label: "Fixed", v: s.resolved, sub: `${s.resolved_pct}% of all reports` },
               { label: "Days to fix, on average", v: s.avg_days_to_fix ?? "—", sub: "from report to fixed" },
-              { label: "New this week", v: s.this_week, sub: `${s.total} reported in total` },
+              { label: "New in the last 7 days", v: s.this_week, sub: `${s.total} reported in total` },
             ].map((x) => (
               <div key={x.label} className="bg-white p-5 sm:p-6">
                 <dt className="text-sm font-semibold text-ink-2">{x.label}</dt>

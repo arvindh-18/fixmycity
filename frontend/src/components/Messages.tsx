@@ -12,10 +12,10 @@ interface Msg {
   created_at: string;
 }
 
-const ROLE_BADGE: Record<string, string> = { worker: "Worker", admin: "Admin" };
+const ROLE_BADGE: Record<string, string> = { worker: "Field worker", public: "Resident" };
 
 /** Chat between the reporter, field workers and admins. Polls every 5 s while the tab is visible. */
-export function Messages({ issueId }: { issueId: number }) {
+export function Messages({ issueId, title = "Messages", hint }: { issueId: number; title?: string; hint?: string }) {
   const toast = useToast();
   const [msgs, setMsgs] = useState<Msg[] | null>(null);
   const [text, setText] = useState("");
@@ -68,8 +68,8 @@ export function Messages({ issueId }: { issueId: number }) {
   return (
     <section className="rounded-[var(--radius-card)] border border-line bg-white">
       <div className="border-b border-line px-4 py-3">
-        <h2 className="font-sans text-base font-bold tracking-normal">Messages</h2>
-        <p className="text-xs text-ink-3">Only the reporter, field workers and city admins can see these.</p>
+        <h2 className="font-sans text-base font-bold tracking-normal">{title}</h2>
+        <p className="text-xs text-ink-3">{hint ?? "Only the resident who reported this and the field worker can see these."}</p>
       </div>
       <div ref={scroller} className="max-h-80 min-h-28 space-y-3 overflow-y-auto px-4 py-3">
         {msgs === null ? (

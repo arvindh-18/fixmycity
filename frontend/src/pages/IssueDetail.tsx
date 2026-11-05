@@ -1,4 +1,4 @@
-import { ArrowLeft, Link2, MapPin, ThumbsUp, Trash } from "lucide-react";
+import { ArrowLeft, Check, CheckCircle2, Link2, MapPin, Play, ThumbsUp, Trash } from "lucide-react";
 import { AttributionControl, MapContainer, Marker, TileLayer } from "react-leaflet";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
@@ -8,25 +8,166 @@ import { Messages } from "../components/Messages";
 import { CategoryIcon, SeverityText, Spinner, STATUS, StatusPill, timeAgo, useToast } from "../components/ui";
 import { api, photoSrc } from "../lib/api";
 import { useAuth } from "../lib/auth";
-import type { Issue, Status } from "../lib/types";
+import type { Issue, StaffMember, Status } from "../lib/types";
 
-const WORKER_STATUSES: Status[] = ["in_progress", "resolved"];
+const DAY = 86_400_000;
 
-function StaffPanel({ issue, onChange, admin }: { issue: Issue; onChange: (i: Issue) => void; admin: boolean }) {
+/** Timeline entries are labelled by status; assignments and merges read better under their own name. */
+const stepLabel = (label: string, note: string) =>
+  note.startsWith("Assigned to") ? "Assigned" : note.startsWith("Unassigned") ? "Unassigned" : note.startsWith("Merged") ? "Merged" : label;
+const daysBetween = (a: string, b?: string | null) =>
+  Math.max(0, Math.round(((b ? new Date(b).getTime() : Date.now()) - new Date(a).getTime()) / DAY));
+
+/** Public accountability card: who reported it, who's on it, how long it has taken. Everyone sees this. */
+function Accountability({ issue }: { issue: Issue }) {
+  const open = issue.status === "open" || issue.status === "in_progress";
+  const steps = [
+    { done: true, label: "Reported", detail: `by ${issue.is_mine ? "you" : issue.reporter_name}`, when: issue.created_at },
+    {
+      done: !!issue.assigned_to_name,
+      label: issue.assigned_to_name ? `Field worker: ${issue.assigned_to_name}` : "Waiting for a field worker",
+      detail: issue.assigned_to_name ? "is responsible for this job" : "A city admin assigns it, or a nearby worker picks it up.",
+      when: issue.assigned_at,
+    },
+    {
+      done: issue.status === "resolved",
+      label: issue.status === "resolved" ? `Fixed${issue.fixed_by_name ? ` by ${issue.fixed_by_name}` : ""}` : "Fixed, with an after photo",
+      detail: issue.status === "resolved" && issue.resolved_at
+        ? `${daysBetween(issue.created_at, issue.resolved_at)} days after it was reported${issue.after_photo_url ? " · photo proof above" : ""}`
+        : "Workers must upload a photo of the finished work.",
+      when: issue.resolved_at,
+    },
+  ];
+  return (
+    <section className="rounded-[var(--radius-card)] border border-line bg-white p-4">
+      <div className="flex items-baseline justify-between gap-2">
+        <h2 className="font-sans text-base font-bold tracking-normal">Who's responsible</h2>
+        {open && <span className="text-sm font-semibold tabular-nums text-st-open">Open {daysBetween(issue.created_at)} days</span>}
+      </div>
+      <ol className="mt-3 space-y-3">
+        {steps.map((s) => (
+          <li key={s.label} className="flex gap-3">
+            <span className={`mt-0.5 flex size-5 shrink-0 items-center justify-center rounded-full ${s.done ? "bg-st-fixed text-white" : "border-2 border-line-2 bg-white"}`}>
+              {s.done && <Check size={12} strokeWidth={3} />}
+            </span>
+            <div className="min-w-0 text-sm">
+              <p className={`font-semibold ${s.done ? "text-ink" : "text-ink-3"}`}>{s.label}</p>
+              <p className="text-ink-3">{s.detail}{s.when && s.done ? ` · ${timeAgo(s.when)}` : ""}</p>
+            </div>
+          </li>
+        ))}
+      </ol>
+      <p className="mt-3 border-t border-line pt-3 text-xs text-ink-3">
+        Every step is public and timestamped. Anyone can see who did what, and when.
+      </p>
+    </section>
+  );
+}
+
+/** +1 by role: residents who didn't report it can vote; the reporter and staff just see the count. */
+function Upvote({ issue, onChange }: { issue: Issue; onChange: (i: Issue) => void }) {
+  const { me } = useAuth();
   const toast = useToast();
   const navigate = useNavigate();
-  const [status, setStatus] = useState<Status>(admin || WORKER_STATUSES.includes(issue.status) ? issue.status : "in_progress");
-  const [note, setNote] = useState("");
+  const count = (
+    <span className="inline-flex items-center gap-2 text-[15px] text-ink-2">
+      <ThumbsUp size={17} /> <span className="font-semibold tabular-nums text-ink">{issue.upvotes}</span>
+      {issue.upvotes === 1 ? "neighbour has" : "neighbours have"} seen this too
+    </span>
+  );
+  if (me && me.role !== "public") return count;
+  if (me && issue.is_mine) {
+    return <div className="flex flex-wrap items-center gap-x-3 gap-y-1">{count}<span className="text-sm text-ink-3">· You reported this, so you're already counted.</span></div>;
+  }
+
+  async function vote() {
+    if (!me) return navigate(`/signin?next=/issues/${issue.id}`);
+    try {
+      const r = await api<{ upvotes: number; upvoted: boolean }>(`/api/issues/${issue.id}/upvote`, { method: "POST" });
+      onChange({ ...issue, ...r });
+    } catch (e) {
+      toast((e as Error).message, "err");
+    }
+  }
+  return (
+    <button onClick={vote} aria-pressed={issue.upvoted}
+      className={`btn h-12 px-6 ${issue.upvoted ? "bg-civic text-white" : "bg-white border border-line-2 text-ink hover:border-civic"}`}>
+      <ThumbsUp size={18} /> {issue.upvoted ? "You +1'd this" : "Me too, +1"}
+      <span className="tabular-nums opacity-70">{issue.upvotes}</span>
+    </button>
+  );
+}
+
+/** Field worker tools on a job. */
+function WorkerPanel({ issue, onChange }: { issue: Issue; onChange: (i: Issue) => void }) {
+  const toast = useToast();
   const [busy, setBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
+  const [note, setNote] = useState("");
+  const someoneElse = !!issue.assigned_to_email && !issue.is_assigned_to_me;
+  const active = issue.status === "open" || issue.status === "in_progress";
 
-  async function post() {
-    // Workers prove a fix with an after photo, so "Fixed" opens the photo sheet.
-    if (!admin && status === "resolved" && !issue.after_photo_url) return setFixing(true);
+  async function update(status: Status, msg: string) {
     setBusy(true);
     try {
-      const updated = await api<Issue>(`/api/issues/${issue.id}/status`, { body: { status, note } });
-      onChange(updated);
+      onChange(await api<Issue>(`/api/issues/${issue.id}/status`, { body: { status, note: note || msg } }));
+      setNote("");
+      toast("Update posted. The resident can see it.");
+    } catch (e) {
+      toast((e as Error).message, "err");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <section className="rounded-[var(--radius-card)] border-2 border-paint bg-[#FFFBEB] p-5">
+      <p className="text-xs font-bold uppercase tracking-wide text-paint-deep">Field worker</p>
+      <h2 className="font-sans text-lg font-bold tracking-normal">
+        {someoneElse ? `Assigned to ${issue.assigned_to_name}` : issue.is_assigned_to_me ? "Your job" : "Unassigned job"}
+      </h2>
+      {someoneElse ? (
+        <p className="mt-1 text-sm text-ink-2">Another field worker is handling this one.</p>
+      ) : !active ? (
+        <p className="mt-1 text-sm text-ink-2">This report is {STATUS[issue.status].label.toLowerCase()}. Nothing to do.</p>
+      ) : (
+        <>
+          <p className="mt-1 text-sm text-ink-2">
+            {issue.is_assigned_to_me ? "Keep the resident posted." : "Start work to pick this job up. It will be assigned to you."}
+          </p>
+          <textarea className="field mt-3 bg-white" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+            placeholder="Optional update, e.g. Material arriving tomorrow." />
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button className="btn-ghost h-12 whitespace-nowrap bg-white px-3" disabled={busy}
+              onClick={() => update("in_progress", issue.status === "in_progress" ? "Update from the field." : "Work started.")}>
+              {busy ? <Spinner size={16} /> : <Play size={17} />} {issue.status === "in_progress" ? "Post update" : "Start work"}
+            </button>
+            <button className="btn-ink h-12 whitespace-nowrap px-3" onClick={() => setFixing(true)}><CheckCircle2 size={18} /> Mark fixed</button>
+          </div>
+        </>
+      )}
+      {fixing && <FixSheet issue={issue} onClose={() => setFixing(false)} onDone={(i) => (setFixing(false), onChange(i))} />}
+    </section>
+  );
+}
+
+/** City admin controls: status, assignment, delete. */
+function AdminPanel({ issue, onChange }: { issue: Issue; onChange: (i: Issue) => void }) {
+  const toast = useToast();
+  const navigate = useNavigate();
+  const [status, setStatus] = useState<Status>(issue.status);
+  const [note, setNote] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [workers, setWorkers] = useState<StaffMember[]>([]);
+
+  useEffect(() => {
+    api<StaffMember[]>("/api/staff").then((s) => setWorkers(s.filter((m) => m.role === "worker"))).catch(() => {});
+  }, []);
+
+  async function post() {
+    setBusy(true);
+    try {
+      onChange(await api<Issue>(`/api/issues/${issue.id}/status`, { body: { status, note } }));
       setNote("");
       toast("Update posted.");
     } catch (e) {
@@ -36,46 +177,48 @@ function StaffPanel({ issue, onChange, admin }: { issue: Issue; onChange: (i: Is
     }
   }
 
+  async function assign(email: string) {
+    try {
+      onChange(await api<Issue>(`/api/issues/${issue.id}/assign`, { body: { email } }));
+      toast(email ? "Assigned. The worker sees it in their jobs." : "Unassigned.");
+    } catch (e) {
+      toast((e as Error).message, "err");
+    }
+  }
+
   async function remove() {
-    if (!window.confirm("Delete this report for everyone? Use this for spam or duplicates.")) return;
+    if (!window.confirm("Delete this report for everyone? Use this for spam only. For duplicates, merge instead.")) return;
     try {
       await api(`/api/issues/${issue.id}`, { method: "DELETE" });
       toast("Report deleted.");
-      navigate("/issues");
+      navigate("/admin");
     } catch (e) {
       toast((e as Error).message, "err");
     }
   }
 
   return (
-    <section className="rounded-[var(--radius-card)] border border-civic/40 bg-civic-soft p-5">
-      <h2 className="font-sans text-base font-bold tracking-normal">Post an update</h2>
-      <p className="text-sm text-ink-2">
-        You're signed in as {admin ? "a city admin" : "a field worker"}. The reporter and the public see this.
-      </p>
-      <div className="mt-4 flex flex-wrap gap-2">
-        {(admin ? (Object.keys(STATUS) as Status[]) : WORKER_STATUSES).map((s) => (
-          <button key={s} type="button" className="chip" aria-pressed={status === s} onClick={() => setStatus(s)}>
-            {STATUS[s].label}
-          </button>
+    <section className="rounded-[var(--radius-card)] border-2 border-ink bg-white p-5">
+      <p className="text-xs font-bold uppercase tracking-wide text-ink-3">City admin</p>
+      <h2 className="font-sans text-lg font-bold tracking-normal">Manage this report</h2>
+      <label htmlFor="assign" className="label mt-4">Field worker</label>
+      <select id="assign" className="field" value={issue.assigned_to_email} onChange={(e) => assign(e.target.value)}>
+        <option value="">Nobody yet</option>
+        {workers.map((w) => <option key={w.email} value={w.email}>{w.name || w.email} · {w.open_jobs} open</option>)}
+      </select>
+      <span className="label mt-4">Status</span>
+      <div className="flex flex-wrap gap-2">
+        {(Object.keys(STATUS) as Status[]).map((s) => (
+          <button key={s} type="button" className="chip" aria-pressed={status === s} onClick={() => setStatus(s)}>{STATUS[s].label}</button>
         ))}
       </div>
-      <textarea
-        className="field mt-3"
-        rows={2}
-        value={note}
-        onChange={(e) => setNote(e.target.value)}
-        placeholder="e.g. Crew scheduled for Thursday morning."
-      />
+      <textarea className="field mt-3" rows={2} value={note} onChange={(e) => setNote(e.target.value)}
+        placeholder="Public note, e.g. Approved for repair this week." />
       <div className="mt-3 flex items-center gap-2">
         <button onClick={post} disabled={busy} className="btn-ink btn-sm">{busy && <Spinner size={14} />} Post update</button>
-        {admin && <button onClick={remove} className="btn btn-sm ml-auto text-danger hover:bg-white"><Trash size={15} /> Delete</button>}
+        <button onClick={remove} className="btn btn-sm ml-auto text-danger hover:bg-chalk"><Trash size={15} /> Delete</button>
       </div>
-      <p className="mt-3 text-sm text-ink-2">
-        {issue.assigned_to_email ? <>Assigned to <span className="font-semibold">{issue.assigned_to_email}</span></> : "Not assigned to anyone yet."}
-        {admin && <> · <Link to="/admin" className="text-civic hover:underline">Assign from the admin page</Link></>}
-      </p>
-      {fixing && <FixSheet issue={issue} onClose={() => setFixing(false)} onDone={(i) => (setFixing(false), onChange(i))} />}
+      <p className="mt-3 text-xs text-ink-3">Admins don't take part in the resident ↔ worker chat.</p>
     </section>
   );
 }
@@ -91,16 +234,6 @@ export default function IssueDetail() {
   useEffect(() => {
     api<Issue>(`/api/issues/${id}`).then(setIssue).catch((e) => setError(e.message));
   }, [id, me?.uid]);
-
-  async function upvote() {
-    if (!me) return navigate(`/signin?next=/issues/${id}`);
-    try {
-      const r = await api<{ upvotes: number; upvoted: boolean }>(`/api/issues/${id}/upvote`, { method: "POST" });
-      setIssue((i) => (i ? { ...i, ...r } : i));
-    } catch (e) {
-      toast((e as Error).message, "err");
-    }
-  }
 
   async function share() {
     const url = window.location.href;
@@ -126,6 +259,9 @@ export default function IssueDetail() {
   if (!issue) return <div className="flex justify-center py-24 text-ink-3"><Spinner size={24} /></div>;
 
   const src = photoSrc(issue.photo_url);
+  // Chat: the reporter, and the field worker on the job (any worker while it's unassigned). Never admins.
+  const canChat = !!me && (issue.is_mine && me.role === "public"
+    || (me.role === "worker" && (issue.is_assigned_to_me || !issue.assigned_to_email)));
   const areaQuery = new URLSearchParams({ ...(issue.pincode && { pincode: issue.pincode }), ...(issue.locality && { locality: issue.locality }) });
 
   return (
@@ -179,23 +315,26 @@ export default function IssueDetail() {
             )}
           </div>
 
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={upvote}
-              aria-pressed={issue.upvoted}
-              className={`btn h-12 px-6 ${issue.upvoted ? "bg-civic text-white" : "bg-white border border-line-2 text-ink hover:border-civic"}`}
-            >
-              <ThumbsUp size={18} /> {issue.upvoted ? "You +1'd this" : "Me too, +1"}
-              <span className="tabular-nums opacity-70">{issue.upvotes}</span>
-            </button>
+          <div className="flex flex-wrap items-center gap-3">
+            <Upvote issue={issue} onChange={setIssue} />
             <button onClick={share} className="btn-ghost h-12"><Link2 size={18} /> Share</button>
           </div>
 
-          {me && me.role !== "public" && <StaffPanel issue={issue} onChange={setIssue} admin={me.is_admin} />}
-          {me && (me.role !== "public" || issue.is_mine) && <Messages issueId={issue.id} />}
+          {me?.role === "worker" && <WorkerPanel issue={issue} onChange={setIssue} />}
+          {me?.role === "admin" && <AdminPanel issue={issue} onChange={setIssue} />}
+          {canChat && (
+            <Messages
+              issueId={issue.id}
+              title={me?.role === "worker" ? `Chat with ${issue.reporter_name} (reporter)` : issue.assigned_to_name ? `Chat with ${issue.assigned_to_name} (field worker)` : "Chat with the field worker"}
+              hint={me?.role === "worker" ? "Only you and the resident who reported this can see these messages."
+                : issue.assigned_to_name ? "Only you and the field worker on this job can see these messages."
+                : "No worker assigned yet. The first field worker to reply will see your message."}
+            />
+          )}
         </div>
 
         <aside className="space-y-6">
+          <Accountability issue={issue} />
           <section className="overflow-hidden rounded-[var(--radius-card)] border border-line bg-white">
             <div className="h-56">
               <MapContainer center={[issue.lat, issue.lng]} zoom={16} scrollWheelZoom={false} attributionControl={false} className="map-soft h-full w-full">
@@ -233,7 +372,7 @@ export default function IssueDetail() {
                       style={{ background: STATUS[u.status].color, boxShadow: `0 0 0 1.5px ${STATUS[u.status].color}` }}
                     />
                     <div className="min-w-0">
-                      <p className="font-semibold">{u.label}</p>
+                      <p className="font-semibold">{stepLabel(u.label, u.note)}</p>
                       {u.note && u.note !== "Reported" && <p className="text-ink-2">{u.note}</p>}
                       <p className="text-sm text-ink-3">{u.by_name} · {timeAgo(u.created_at)}</p>
                     </div>
@@ -243,7 +382,7 @@ export default function IssueDetail() {
             </ol>
             {issue.status !== "resolved" && issue.status !== "rejected" && (
               <p className="mt-4 rounded-xl bg-white border border-line p-3 text-sm text-ink-2">
-                Each +1 moves this up the list for city staff. Share it with neighbours who've seen it too.
+                Each +1 from a neighbour moves this up the list for city staff. Share it with people who've seen it too.
               </p>
             )}
           </section>

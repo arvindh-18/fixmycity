@@ -72,6 +72,7 @@ export default function SignIn() {
     signInEmail,
     signInPhone,
     signInDemo,
+    signInToken,
     signOut,
     sendPasswordReset,
     setNewPassword,
@@ -250,12 +251,29 @@ export default function SignIn() {
         </div>
       ) : config.auth_mode === "dev" ? (
         <div className="mt-8 space-y-3">
-          <p className="rounded-xl bg-st-open-soft px-4 py-3 text-sm">
-            Demo mode: Supabase isn't configured on this server yet, so you can sign in with one click.
-          </p>
-          <button className="btn-ink h-12 w-full" disabled={busy} onClick={() => run(() => signInDemo(role))}>
-            {busy && <Spinner size={16} />} Continue as a demo {ROLE_NAME[role]}
-          </button>
+          {config.demo ? (
+            <>
+              <p className="rounded-xl bg-st-open-soft px-4 py-3 text-sm">
+                Demo build: pick a person to sign in as. You can switch any time from the Demo box.
+              </p>
+              {config.demo.personas.filter((p) => p.role === role).map((p) => (
+                <button key={p.token} className="flex w-full items-start gap-3 rounded-2xl border border-line bg-white p-3 text-left hover:border-civic"
+                  disabled={busy} onClick={() => run(() => signInToken(p.token))}>
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-ink font-semibold text-white">{p.name[0]}</span>
+                  <span><span className="block font-semibold">{p.name}</span><span className="block text-sm text-ink-2">{p.blurb}</span></span>
+                </button>
+              ))}
+            </>
+          ) : (
+            <>
+              <p className="rounded-xl bg-st-open-soft px-4 py-3 text-sm">
+                Demo mode: Supabase isn't configured on this server yet, so you can sign in with one click.
+              </p>
+              <button className="btn-ink h-12 w-full" disabled={busy} onClick={() => run(() => signInDemo(role))}>
+                {busy && <Spinner size={16} />} Continue as a demo {ROLE_NAME[role]}
+              </button>
+            </>
+          )}
         </div>
       ) : config.auth_mode === "none" ? (
         <p className="mt-8 rounded-xl bg-st-open-soft px-4 py-3 text-sm">

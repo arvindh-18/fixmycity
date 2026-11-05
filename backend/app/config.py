@@ -53,6 +53,12 @@ class Settings:
     nominatim_url = _env("NOMINATIM_URL", "https://nominatim.openstreetmap.org")
     nominatim_contact = _env("NOMINATIM_CONTACT", "")
 
+    # Demo build: mock data, persona switcher, developer console, offline AI fallback. Never on in production.
+    demo_mode = _env("DEMO_MODE").lower() in ("1", "true", "yes")
+    demo_lat = float(_env("DEMO_LAT", "13.0287"))
+    demo_lng = float(_env("DEMO_LNG", "80.0168"))
+    demo_label = _env("DEMO_LABEL", "Saveetha Engineering College, Thandalam")
+
     cors_origins = [o.strip() for o in _env("CORS_ORIGINS", "http://localhost:5173").split(",") if o.strip()]
     max_upload_mb = int(_env("MAX_UPLOAD_MB", "10"))
 
@@ -71,7 +77,8 @@ class Settings:
 
     @property
     def ai_enabled(self) -> bool:
-        return bool(self.gemini_api_key)
+        # The demo answers AI requests offline when there's no Gemini key.
+        return bool(self.gemini_api_key) or self.demo_mode
 
 
 _deprecated_prefix = "FIRE" + "BASE_"

@@ -12,12 +12,21 @@ router = APIRouter(prefix="/api/issues", tags=["messages"])
 
 
 def can_chat(user: User | None, issue: Issue) -> bool:
-    return bool(user and (user.is_staff or user.uid == issue.reporter_uid))
+    """Chat is between the resident who reported it and the field worker on the job.
+
+    Admins aren't part of it. Before anyone is assigned, any worker may reply (and so pick the job up);
+    after that only the assigned worker can.
+    """
+    if not user or user.is_admin:
+        return False
+    if user.uid == issue.reporter_uid:
+        return True
+    return user.is_worker and (not issue.assigned_to_email or issue.assigned_to_email == user.email)
 
 
 def _check(user: User, issue: Issue) -> None:
     if not can_chat(user, issue):
-        raise HTTPException(403, "Only the person who reported this, field workers and city admins can see these messages.")
+        raise HTTPException(403, "This chat is only between the resident who reported it and the field worker on the job.")
 
 
 def _out(m: Message, user: User) -> dict:
