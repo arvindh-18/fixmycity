@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 from ..auth import User, admin_user, current_user, optional_user, role_for_email
 from ..config import settings
 from ..db import CATEGORIES, Issue, StaffMember, get_db, now
-from .issues import resolution_days
+from .issues import resolution_days, serialize
 
 router = APIRouter(prefix="/api")
 
@@ -190,3 +190,43 @@ def stats(pincode: str = "", locality: str = "", db: Session = Depends(get_db),
             for (loc, pin), n in sorted(by_area.items(), key=lambda kv: -kv[1])[:6]
         ],
     }
+
+
+# ---- Proof of work --------------------------------------------------------
+
+def _aware(dt):
+    return dt if dt is None or dt.tzinfo else dt.replace(tzinfo=now().tzinfo)
+
+
+@router.get("/stats/weekly")
+def weekly(weeks: int = Query(8, ge=1, le=52), pincode: str = "", locality: str = "", db: Session = Depends(get_db)):
+    """Reported vs fixed per week (weeks start on Monday), oldest first."""
+    today = now().date()
+    first = today - timedelta(days=today.weekday()) - timedelta(weeks=weeks - 1)
+    stmt = select(Issue.created_at, Issue.resolved_at, Issue.status)
+    if pincode:
+        stmt = stmt.where(Issue.pincode == pincode.strip())
+    if locality:
+        stmt = stmt.where(func.lower(Issue.locality) == locality.strip().lower())
+    buckets = [{"week_start": (first + timedelta(weeks=i)).isoformat(), "reported": 0, "fixed": 0} for i in range(weeks)]
+
+    def slot(dt):
+        if dt is None:
+            return None
+        i = (_aware(dt).date() - first).days // 7
+        return i if 0 <= i < weeks else None
+
+    for created, resolved, status in db.execute(stmt):
+        if (i := slot(created)) is not None:
+            buckets[i]["reported"] += 1
+        if status == "resolved" and (i := slot(resolved)) is not None:
+            buckets[i]["fixed"] += 1
+    return buckets
+
+
+@router.get("/stats/recent-fixes")
+def recent_fixes(limit: int = Query(10, le=30), db: Session = Depends(get_db), user: User | None = Depends(optional_user)):
+    """Latest fixed reports, with before/after photos first."""
+    rows = db.scalars(select(Issue).where(Issue.status == "resolved", Issue.resolved_at.is_not(None))
+                      .order_by(Issue.has_after_photo.desc(), Issue.resolved_at.desc()).limit(limit)).all()
+    return [serialize(i, user) for i in rows]

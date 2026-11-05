@@ -240,3 +240,14 @@ def test_admin_assigns_job_and_worker_sees_it():
     done = client.get("/api/issues", params={"worker": "me", "status": "resolved", "sort": "fixed"}, headers=WORKER).json()
     assert [j["id"] for j in done] == [iid]
     assert client.get("/api/stats").json()["fixed_this_week"] == 1
+
+
+def test_weekly_proof_of_work_and_recent_fixes():
+    a = report().json()["id"]
+    report()
+    client.post(f"/api/issues/{a}/fix", files={"photo": ("a.jpg", jpeg(), "image/jpeg")}, headers=WORKER)
+    weeks = client.get("/api/stats/weekly", params={"weeks": 8}).json()
+    assert len(weeks) == 8 and weeks[-1]["reported"] == 2 and weeks[-1]["fixed"] == 1
+    assert sum(w["reported"] for w in weeks[:-1]) == 0
+    fixes = client.get("/api/stats/recent-fixes").json()
+    assert [f["id"] for f in fixes] == [a] and fixes[0]["after_photo_url"]

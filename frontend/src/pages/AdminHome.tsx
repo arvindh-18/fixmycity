@@ -2,6 +2,7 @@ import { Copy, Trash, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { IssueCard } from "../components/IssueCard";
+import { ProofOfWork } from "../components/ProofOfWork";
 import { Spinner, useToast } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -121,6 +122,10 @@ export default function AdminHome() {
           <span className="text-sm font-semibold text-civic">Review</span>
         </Link>
       )}
+
+      <div className="mt-6">
+        <ProofOfWork />
+      </div>
 
       <div className="mt-10 grid gap-10 lg:grid-cols-[1fr_380px]">
         <section>

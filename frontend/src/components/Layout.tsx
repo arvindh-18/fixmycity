@@ -93,7 +93,7 @@ export function Layout() {
             <Link to="/report" className="btn-paint btn-sm sm:h-10 sm:px-5">
               <Plus size={18} strokeWidth={2.5} /> <span className="hidden min-[400px]:inline">Report a problem</span><span className="min-[400px]:hidden">Report</span>
             </Link>
-            {ready && (me ? <UserMenu /> : <Link to="/signin" className="btn-ghost btn-sm sm:h-10">Sign in</Link>)}
+            {ready && (me ? <UserMenu /> : <Link to="/signin" className="btn-ghost btn-sm whitespace-nowrap sm:h-10">Sign in</Link>)}
           </div>
         </div>
         <nav className="sm:hidden flex gap-1 px-3 pb-2">
