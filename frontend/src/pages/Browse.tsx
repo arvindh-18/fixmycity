@@ -1,9 +1,10 @@
-import { List, Map as MapIcon, Plus } from "lucide-react";
+import { List, LocateFixed, Map as MapIcon, Plus } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link, useSearchParams } from "react-router-dom";
 import { AreaSearch, type AreaPick } from "../components/AreaSearch";
 import { IssueCard } from "../components/IssueCard";
 import { IssueMap } from "../components/IssueMap";
+import { NearMe } from "../components/NearMe";
 import { Spinner } from "../components/ui";
 import { api } from "../lib/api";
 import { useAuth } from "../lib/auth";
@@ -30,6 +31,7 @@ export default function Browse() {
   const [error, setError] = useState("");
   const [hover, setHover] = useState<number | null>(null);
   const [view, setView] = useState<"list" | "map">("list");
+  const [nearMe, setNearMe] = useState(params.get("near") === "1");
 
   const set = (patch: Record<string, string>) => {
     const next = new URLSearchParams(params);
@@ -106,6 +108,9 @@ export default function Browse() {
           <option value="new">Newest first</option>
           <option value="top">Most +1s</option>
         </select>
+        <button className="chip" aria-pressed={nearMe} onClick={() => setNearMe((v) => !v)}>
+          <LocateFixed size={15} /> Use my location
+        </button>
         {me && (
           <button className="chip" aria-pressed={mine} onClick={() => set({ mine: mine ? "" : "1" })}>
             Only mine
@@ -125,7 +130,13 @@ export default function Browse() {
         </div>
       </div>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
+      {nearMe && (
+        <div className="mt-6">
+          <NearMe autoStart onClose={() => setNearMe(false)} />
+        </div>
+      )}
+
+      <div className={`mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)] ${nearMe ? "hidden" : ""}`}>
         <div className={view === "map" ? "hidden lg:block" : ""}>
           {issues === null ? (
             <div className="flex justify-center py-20 text-ink-3"><Spinner size={24} /></div>

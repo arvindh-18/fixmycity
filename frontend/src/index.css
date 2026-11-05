@@ -102,3 +102,9 @@ h1, h2, h3, .font-display {
 }
 @keyframes shimmer { to { background-position: -200% 0; } }
 @media (prefers-reduced-motion: reduce) { .shimmer { animation: none; } }
+
+/* "You are here" dot */
+.here-dot { position: relative; width: 18px; height: 18px; border-radius: 9999px; background: #2b5ba8; border: 3px solid #fff; box-shadow: 0 1px 4px rgb(0 0 0 / .35); }
+.here-dot::after { content: ""; position: absolute; inset: -9px; border-radius: 9999px; background: rgb(43 91 168 / .35); animation: here-pulse 1.8s ease-out infinite; }
+@keyframes here-pulse { from { transform: scale(.4); opacity: 1; } to { transform: scale(1.6); opacity: 0; } }
+@media (prefers-reduced-motion: reduce) { .here-dot::after { animation: none; opacity: .4; } }

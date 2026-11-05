@@ -1,7 +1,7 @@
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine,
+    DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, UniqueConstraint, create_engine, inspect, text,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship, sessionmaker
 
@@ -68,6 +68,16 @@ class Issue(Base):
     photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
     has_photo: Mapped[int] = mapped_column(Integer, default=0)
 
+    # What the resident originally typed or said (any language), before Gemini structured it.
+    original_text: Mapped[str | None] = mapped_column(Text, nullable=True, default="")
+    # Duplicate merged into another report.
+    merged_into: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Field work
+    assigned_to_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
+    fixed_by_email: Mapped[str | None] = mapped_column(String(254), nullable=True, index=True)
+    after_photo: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True, deferred=True)
+    has_after_photo: Mapped[int | None] = mapped_column(Integer, nullable=True, default=0)
+
     reporter_uid: Mapped[str] = mapped_column(String(128), index=True)
     reporter_name: Mapped[str] = mapped_column(String(120), default="")
     upvotes: Mapped[int] = mapped_column(Integer, default=0)
@@ -116,8 +126,31 @@ class StaffMember(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=now)
 
 
+def _add_missing_columns() -> None:
+    """create_all() never alters existing tables, so add any new columns (SQLite and Postgres)."""
+    insp = inspect(engine)
+    for table in Base.metadata.sorted_tables:
+        if not insp.has_table(table.name):
+            continue
+        existing = {c["name"] for c in insp.get_columns(table.name)}
+        for col in table.columns:
+            if col.name in existing:
+                continue
+            ddl = f"ALTER TABLE {table.name} ADD COLUMN {col.name} {col.type.compile(dialect=engine.dialect)}"
+            default = col.default.arg if col.default is not None and col.default.is_scalar else None
+            if isinstance(default, bool):
+                default = int(default)
+            if isinstance(default, int):
+                ddl += f" DEFAULT {default}"
+            elif isinstance(default, str):
+                ddl += " DEFAULT '" + default.replace("'", "''") + "'"
+            with engine.begin() as conn:
+                conn.execute(text(ddl))
+
+
 def init_db() -> None:
     Base.metadata.create_all(engine)
+    _add_missing_columns()
 
 
 def get_db():

@@ -3,6 +3,7 @@ import { Camera, MapPin, Plus } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { AreaSearch, loadAreas } from "../components/AreaSearch";
+import { NearMe } from "../components/NearMe";
 import { IssueCard } from "../components/IssueCard";
 import { StreetScene } from "../components/StreetScene";
 import { api } from "../lib/api";
@@ -102,6 +103,11 @@ export default function Home() {
             </div>
           )}
         </div>
+      </section>
+
+      {/* ---- Near me ------------------------------------------------------- */}
+      <section className="mx-auto max-w-6xl px-4 pb-16 sm:px-6 sm:pb-20">
+        <NearMe />
       </section>
 
       {/* ---- How it works -------------------------------------------------- */}

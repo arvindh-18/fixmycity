@@ -120,6 +120,18 @@ def test_nearby_finds_open_reports_close_to_pin():
     assert len(near) == 1 and near[0]["distance_m"] < 150 and far == []
 
 
+def test_near_returns_issues_sorted_by_distance_with_filters():
+    report(lat=13.0400, lng=80.2400)
+    report(lat=13.0450, lng=80.2400)  # ~550 m north
+    report(lat=13.2000, lng=80.2400)  # far away
+    rows = client.get("/api/issues/near", params={"lat": 13.0401, "lng": 80.2400, "radius": 1000}).json()
+    assert len(rows) == 2 and rows[0]["distance_m"] < rows[1]["distance_m"]
+    iid = rows[0]["id"]
+    client.post(f"/api/issues/{iid}/status", json={"status": "rejected", "note": "x"}, headers=ADMIN)
+    active = client.get("/api/issues/near", params={"lat": 13.0401, "lng": 80.24, "radius": 1000, "status": "active"}).json()
+    assert [r["id"] for r in active] == [rows[1]["id"]]
+
+
 def test_ai_analyze_uses_gemini(monkeypatch):
     monkeypatch.setattr(gemini, "_call", lambda parts, schema=None:
                         '{"is_civic_issue": true, "category": "pothole", "title": "Pothole", '
