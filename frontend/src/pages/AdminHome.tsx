@@ -1,4 +1,4 @@
-import { Copy, Trash, UserPlus } from "lucide-react";
+import { AlertTriangle, Copy, Trash, UserPlus } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import { Link } from "react-router-dom";
 import { IssueCard } from "../components/IssueCard";
@@ -10,9 +10,14 @@ import type { Issue, StaffMember, Stats } from "../lib/types";
 
 const DAY = 86_400_000;
 
-/** Open reports ranked by +1s and how long they've waited. */
+/** Open reports ranked by +1s, rechecking flags, and how long they've waited. */
 function priority(i: Issue) {
-  return i.upvotes * 2 + (Date.now() - new Date(i.created_at).getTime()) / DAY + (i.severity === "high" ? 5 : 0);
+  return (
+    (i.status === "rechecking" ? 25 : 0) +
+    i.upvotes * 2 +
+    (Date.now() - new Date(i.created_at).getTime()) / DAY +
+    (i.severity === "high" ? 5 : 0)
+  );
 }
 
 function AssignRow({ issue, workers, onChange }: { issue: Issue; workers: StaffMember[]; onChange: (i: Issue) => void }) {
@@ -66,6 +71,7 @@ export default function AdminHome() {
   }, []);
 
   const attention = useMemo(() => (open ?? []).slice().sort((a, b) => priority(b) - priority(a)).slice(0, 8), [open]);
+  const rechecking = useMemo(() => (open ?? []).filter((i) => i.status === "rechecking"), [open]);
   const workers = useMemo(() => (staff ?? []).filter((m) => m.role === "worker"), [staff]);
 
   function updateIssue(i: Issue) {
@@ -116,6 +122,19 @@ export default function AdminHome() {
           </div>
         ))}
       </dl>
+
+      {rechecking.length > 0 && (
+        <Link
+          to="/issues?status=rechecking"
+          className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-amber-300 bg-amber-50 px-4 py-3 hover:border-amber-400"
+        >
+          <AlertTriangle size={18} className="shrink-0 text-amber-600" />
+          <span className="flex-1 text-amber-950">
+            <span className="font-semibold">{rechecking.length} report{rechecking.length === 1 ? "" : "s"} reopened for rechecking</span> — resident flagged fix as fake or incomplete
+          </span>
+          <span className="text-sm font-semibold text-amber-800">Inspect</span>
+        </Link>
+      )}
 
       {!!dupes && (
         <Link to="/admin/duplicates" className="mt-4 flex items-center gap-3 rounded-[var(--radius-card)] border border-paint bg-[#FDF7E3] px-4 py-3 hover:border-paint-deep">

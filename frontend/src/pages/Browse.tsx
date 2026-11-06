@@ -12,6 +12,7 @@ import type { Issue, Stats } from "../lib/types";
 
 const STATUS_TABS = [
   { id: "active", label: "Open" },
+  { id: "rechecking", label: "Rechecking" },
   { id: "resolved", label: "Fixed" },
   { id: "", label: "All" },
 ];

@@ -72,7 +72,7 @@ def _staff_list(db: Session) -> list[dict]:
     for e in sorted(settings.admin_emails):  # ADMIN_EMAILS always wins
         rows[e] = {"email": e, "name": "", "role": "admin", "source": "env", "added_by": ""}
     jobs = dict(db.execute(select(Issue.assigned_to_email, func.count(Issue.id))
-                           .where(Issue.status.in_(("open", "in_progress")), Issue.assigned_to_email.is_not(None))
+                           .where(Issue.status.in_(("open", "in_progress", "rechecking")), Issue.assigned_to_email.is_not(None))
                            .group_by(Issue.assigned_to_email)).all())
     for r in rows.values():
         r["open_jobs"] = jobs.get(r["email"], 0)
@@ -170,7 +170,7 @@ def stats(pincode: str = "", locality: str = "", db: Session = Depends(get_db),
         stmt = stmt.where(func.lower(Issue.locality) == locality.strip().lower())
     issues = db.scalars(stmt).all()
 
-    counts = {s: 0 for s in ("open", "in_progress", "resolved", "rejected")}
+    counts = {s: 0 for s in ("open", "in_progress", "rechecking", "resolved", "rejected")}
     by_cat: dict[str, int] = {}
     by_area: dict[tuple[str, str], int] = {}
     week_ago = now() - timedelta(days=7)
@@ -183,16 +183,17 @@ def stats(pincode: str = "", locality: str = "", db: Session = Depends(get_db),
         if i.resolved_at:
             resolved = i.resolved_at if i.resolved_at.tzinfo else i.resolved_at.replace(tzinfo=week_ago.tzinfo)
             fixed_this_week += i.status == "resolved" and resolved >= week_ago
-        if i.status in ("open", "in_progress"):
+        if i.status in ("open", "in_progress", "rechecking"):
             by_cat[i.category] = by_cat.get(i.category, 0) + 1
             key = (i.locality or "Unknown area", i.pincode)
             by_area[key] = by_area.get(key, 0) + 1
 
-    decided = counts["resolved"] + counts["open"] + counts["in_progress"]
+    decided = counts["resolved"] + counts["open"] + counts["in_progress"] + counts["rechecking"]
     return {
         "total": len(issues),
         "open": counts["open"],
         "in_progress": counts["in_progress"],
+        "rechecking": counts["rechecking"],
         "resolved": counts["resolved"],
         "resolved_pct": round(100 * counts["resolved"] / decided) if decided else 0,
         "avg_days_to_fix": resolution_days(issues),

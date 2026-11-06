@@ -15,7 +15,13 @@ from ..db import CATEGORIES, SEVERITIES, STATUSES, Issue, StaffMember, StatusUpd
 
 router = APIRouter(prefix="/api/issues", tags=["issues"])
 
-STATUS_LABELS = {"open": "Reported", "in_progress": "Being fixed", "resolved": "Fixed", "rejected": "Closed"}
+STATUS_LABELS = {
+    "open": "Reported",
+    "in_progress": "Being fixed",
+    "rechecking": "Rechecking",
+    "resolved": "Fixed",
+    "rejected": "Closed",
+}
 
 
 def iso(dt: datetime | None) -> str | None:
@@ -104,7 +110,7 @@ def list_issues(
         stmt = stmt.where(or_(func.lower(Issue.title).like(like), func.lower(Issue.locality).like(like),
                               Issue.pincode.like(like), func.lower(Issue.address).like(like)))
     if status == "active":
-        stmt = stmt.where(Issue.status.in_(("open", "in_progress")))
+        stmt = stmt.where(Issue.status.in_(("open", "in_progress", "rechecking")))
     elif status:
         stmt = stmt.where(Issue.status == status)
     if category:
@@ -144,7 +150,7 @@ def nearby(lat: float, lng: float, category: str = "", radius: int = Query(150, 
     """Open reports close to a pin — shown before submitting so people upvote instead of duplicating."""
     d = radius / 111_000
     stmt = select(Issue).where(
-        Issue.status.in_(("open", "in_progress")),
+        Issue.status.in_(("open", "in_progress", "rechecking")),
         Issue.lat.between(lat - d, lat + d), Issue.lng.between(lng - d * 1.2, lng + d * 1.2),
     )
     if category:
@@ -164,7 +170,7 @@ def near(lat: float, lng: float, radius: int = Query(2000, ge=100, le=10000), st
     dlng = d / max(0.2, math.cos(math.radians(lat)))
     stmt = select(Issue).where(Issue.lat.between(lat - d, lat + d), Issue.lng.between(lng - dlng, lng + dlng))
     if status == "active":
-        stmt = stmt.where(Issue.status.in_(("open", "in_progress")))
+        stmt = stmt.where(Issue.status.in_(("open", "in_progress", "rechecking")))
     elif status:
         stmt = stmt.where(Issue.status == status)
     if unassigned:
@@ -180,7 +186,7 @@ def areas(db: Session = Depends(get_db)):
     """Every locality/pincode that has reports — powers the area search box."""
     rows = db.execute(
         select(Issue.locality, Issue.pincode, func.count(Issue.id),
-               func.sum(case((Issue.status.in_(("open", "in_progress")), 1), else_=0)))
+               func.sum(case((Issue.status.in_(("open", "in_progress", "rechecking")), 1), else_=0)))
         .group_by(Issue.locality, Issue.pincode)
         .order_by(func.count(Issue.id).desc())
     ).all()
@@ -360,6 +366,25 @@ async def mark_fixed(issue_id: int, photo: UploadFile = File(...), note: str = F
     if user.is_worker and not issue.assigned_to_email:
         _assign_to(issue, user.email, user.name)
     issue.updates.append(StatusUpdate(status="resolved", note=note.strip() or "Fixed. See the after photo.", by_name=user.name))
+    db.commit()
+    return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
+
+
+class ReopenIn(BaseModel):
+    note: str = ""
+
+
+@router.post("/{issue_id}/reopen")
+def reopen_issue(issue_id: int, body: ReopenIn, db: Session = Depends(get_db), user: User = Depends(current_user)):
+    """Reopen a solved issue if the fix was inadequate or fake. Sets status to 'rechecking' for admin inspection."""
+    issue = _get(db, issue_id)
+    if issue.status != "resolved":
+        raise HTTPException(422, "Only solved/fixed reports can be reopened for rechecking.")
+    note = body.note.strip() or "Reopened for rechecking — reported that this issue was not properly fixed."
+    issue.status = "rechecking"
+    issue.resolved_at = None
+    issue.updated_at = now()
+    issue.updates.append(StatusUpdate(status="rechecking", note=note, by_name=user.name))
     db.commit()
     return serialize(issue, user, _voted(db, user, [issue.id]), detail=True)
 

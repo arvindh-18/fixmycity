@@ -118,6 +118,16 @@ def test_only_admin_changes_status_and_stats_follow():
     s = client.get("/api/stats", params={"pincode": "600017"}).json()
     assert s["total"] == 1 and s["resolved"] == 1 and s["resolved_pct"] == 100
 
+    # Reopening when resolved moves it to rechecking:
+    reopen_resp = client.post(f"/api/issues/{iid}/reopen", json={"note": "Fake fix - pothole still here"}, headers=CITIZEN)
+    assert reopen_resp.status_code == 200
+    assert reopen_resp.json()["status"] == "rechecking"
+    assert reopen_resp.json()["resolved_at"] is None
+    s2 = client.get("/api/stats", params={"pincode": "600017"}).json()
+    assert s2["resolved"] == 0 and s2["rechecking"] == 1
+    # Cannot reopen a non-resolved issue:
+    assert client.post(f"/api/issues/{iid}/reopen", json={"note": "again"}, headers=CITIZEN).status_code == 422
+
 
 def test_nearby_finds_open_reports_close_to_pin():
     report()

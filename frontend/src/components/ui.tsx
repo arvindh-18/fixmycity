@@ -25,6 +25,7 @@ export function CategoryIcon({ category, size = 18, className }: { category: str
 export const STATUS: Record<Status, { label: string; color: string; soft: string }> = {
   open: { label: "Reported", color: "var(--color-st-open)", soft: "var(--color-st-open-soft)" },
   in_progress: { label: "Being fixed", color: "var(--color-st-progress)", soft: "var(--color-st-progress-soft)" },
+  rechecking: { label: "Rechecking", color: "var(--color-st-rechecking)", soft: "var(--color-st-rechecking-soft)" },
   resolved: { label: "Fixed", color: "var(--color-st-fixed)", soft: "var(--color-st-fixed-soft)" },
   rejected: { label: "Closed", color: "var(--color-st-closed)", soft: "var(--color-st-closed-soft)" },
 };

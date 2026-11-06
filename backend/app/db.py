@@ -34,7 +34,7 @@ class Base(DeclarativeBase):
     pass
 
 
-STATUSES = ("open", "in_progress", "resolved", "rejected")
+STATUSES = ("open", "in_progress", "rechecking", "resolved", "rejected")
 SEVERITIES = ("low", "medium", "high")
 CATEGORIES = {
     "pothole": "Pothole / road damage",

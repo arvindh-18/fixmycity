@@ -34,7 +34,7 @@ function JobCard({ issue, onChange }: { issue: Issue; onChange: (i: Issue) => vo
     }
   }
 
-  const active = issue.status === "open" || issue.status === "in_progress";
+  const active = issue.status === "open" || issue.status === "in_progress" || issue.status === "rechecking";
   return (
     <div>
       <IssueCard issue={issue} />

@@ -1,9 +1,10 @@
-import { ArrowLeft, Check, CheckCircle2, Link2, MapPin, Play, ThumbsUp, Trash } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Check, CheckCircle2, Link2, MapPin, Play, RotateCcw, ThumbsUp, Trash } from "lucide-react";
 import { AttributionControl, MapContainer, Marker, TileLayer } from "react-leaflet";
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { OSM_ATTR, OSM_TILES, statusIcon } from "../components/IssueMap";
 import { FixSheet } from "../components/FixSheet";
+import { ReopenSheet } from "../components/ReopenSheet";
 import { Messages } from "../components/Messages";
 import { CategoryIcon, SeverityText, Spinner, STATUS, StatusPill, timeAgo, useToast } from "../components/ui";
 import { api, photoSrc } from "../lib/api";
@@ -230,6 +231,7 @@ export default function IssueDetail() {
   const navigate = useNavigate();
   const [issue, setIssue] = useState<Issue | null>(null);
   const [error, setError] = useState("");
+  const [reopening, setReopening] = useState(false);
 
   useEffect(() => {
     api<Issue>(`/api/issues/${id}`).then(setIssue).catch((e) => setError(e.message));
@@ -296,6 +298,46 @@ export default function IssueDetail() {
               <img src={src} alt={issue.title} className="max-h-[520px] w-full object-cover" />
             </div>
           )}
+
+          {issue.status === "resolved" && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div className="flex items-start gap-3">
+                  <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                  <div>
+                    <p className="font-semibold text-amber-950">Was this problem actually fixed?</p>
+                    <p className="text-sm text-amber-800">
+                      If the worker uploaded a fake photo or the work wasn't done, you can reopen this report. It will move to <strong>Rechecking</strong> and prompt the city admin to inspect.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!me) return navigate(`/signin?next=/issues/${issue.id}`);
+                    setReopening(true);
+                  }}
+                  className="btn-ghost shrink-0 border border-amber-300 bg-white font-semibold text-amber-950 hover:bg-amber-100"
+                >
+                  <RotateCcw size={15} /> Reopen report
+                </button>
+              </div>
+            </div>
+          )}
+
+          {issue.status === "rechecking" && (
+            <div className="rounded-2xl border border-amber-300 bg-amber-50 p-4 text-amber-950">
+              <div className="flex items-start gap-3">
+                <AlertTriangle className="mt-0.5 size-5 shrink-0 text-amber-600" />
+                <div>
+                  <p className="font-semibold text-amber-950">Under rechecking</p>
+                  <p className="text-sm text-amber-800">
+                    A resident flagged that this issue was not properly fixed. City administration has been prompted to revisit this problem and reassign field staff if needed.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
           <div>
             <div className="flex flex-wrap items-center gap-3 text-sm text-ink-2">
               <StatusPill status={issue.status} />
@@ -318,6 +360,18 @@ export default function IssueDetail() {
           <div className="flex flex-wrap items-center gap-3">
             <Upvote issue={issue} onChange={setIssue} />
             <button onClick={share} className="btn-ghost h-12"><Link2 size={18} /> Share</button>
+            {issue.status === "resolved" && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (!me) return navigate(`/signin?next=/issues/${issue.id}`);
+                  setReopening(true);
+                }}
+                className="btn-ghost h-12 border border-amber-300 font-semibold text-amber-950 hover:bg-amber-50"
+              >
+                <RotateCcw size={17} /> Reopen report
+              </button>
+            )}
           </div>
 
           {me?.role === "worker" && <WorkerPanel issue={issue} onChange={setIssue} />}
@@ -388,6 +442,17 @@ export default function IssueDetail() {
           </section>
         </aside>
       </div>
+
+      {reopening && (
+        <ReopenSheet
+          issue={issue}
+          onClose={() => setReopening(false)}
+          onDone={(updated) => {
+            setIssue(updated);
+            setReopening(false);
+          }}
+        />
+      )}
     </div>
   );
 }

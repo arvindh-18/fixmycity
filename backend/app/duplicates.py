@@ -62,7 +62,7 @@ def candidates(db: Session, issue: Issue) -> list[tuple[Issue, float, float]]:
     stmt = select(Issue).where(
         Issue.id != issue.id,
         Issue.category == issue.category,
-        Issue.status.in_(("open", "in_progress")),
+        Issue.status.in_(("open", "in_progress", "rechecking")),
         Issue.created_at >= now() - timedelta(days=WINDOW_DAYS),
         Issue.lat.between(issue.lat - d, issue.lat + d),
         Issue.lng.between(issue.lng - dlng, issue.lng + dlng),

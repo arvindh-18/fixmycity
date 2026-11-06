@@ -1,4 +1,4 @@
-export type Status = "open" | "in_progress" | "resolved" | "rejected";
+export type Status = "open" | "in_progress" | "rechecking" | "resolved" | "rejected";
 export type Severity = "low" | "medium" | "high";
 
 export interface Category {
@@ -88,6 +88,7 @@ export interface Stats {
   total: number;
   open: number;
   in_progress: number;
+  rechecking?: number;
   resolved: number;
   resolved_pct: number;
   avg_days_to_fix: number | null;

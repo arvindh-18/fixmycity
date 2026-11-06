@@ -12,6 +12,7 @@ const STATUS_FILTERS = [
   { id: "", label: "All" },
   { id: "open", label: "Reported" },
   { id: "in_progress", label: "Being fixed" },
+  { id: "rechecking", label: "Rechecking" },
   { id: "resolved", label: "Fixed" },
 ];
 const RADII = [500, 1000, 2000, 5000];
