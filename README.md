@@ -111,7 +111,7 @@ project, and that the server's clock is roughly right (60 s of drift is tolerate
 ## Get a Gemini key (1 minute)
 
 [aistudio.google.com/apikey](https://aistudio.google.com/apikey) → **Create API key** → `GEMINI_API_KEY`.
-The model defaults to `gemini-3.6-flash`; change it with `GEMINI_MODEL`.
+The model defaults to `gemini-3.5-flash-lite`; change it with `GEMINI_MODEL`.
 
 ---
 

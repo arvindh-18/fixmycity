@@ -43,7 +43,12 @@ class Settings:
 
     # Gemini
     gemini_api_key = _env("GEMINI_API_KEY")
-    gemini_model = _env("GEMINI_MODEL", "gemini-3.6-flash")
+    _raw_model = _env("GEMINI_MODEL", "gemini-3.5-flash-lite")
+    gemini_model = {
+        "3.5": "gemini-3.5-flash-lite",
+        "gemini-3.5": "gemini-3.5-flash-lite",
+        "gemini-3.5-flash": "gemini-3.5-flash-lite",
+    }.get(_raw_model.lower().strip(), _raw_model.strip())
 
     # Map defaults + OpenStreetMap Nominatim (geocoding)
     city_name = _env("CITY_NAME", "Chennai")
